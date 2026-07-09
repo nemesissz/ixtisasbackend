@@ -1,0 +1,6 @@
+@MmuIspApi_HostAddress = http://localhost:5053
+
+GET {{MmuIspApi_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

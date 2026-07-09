@@ -1,0 +1,8 @@
+bin/
+obj/
+appsettings.Development.json
+appsettings.Local.json
+*.user
+
+# real tələbə PII (FİN, iş nömrəsi, ad) — məlumat artıq MySQL-dədir, repoya düşməsin
+SeedData/*.json
