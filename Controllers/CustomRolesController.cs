@@ -30,7 +30,7 @@ public class CustomRolesController : ControllerBase
             _db.CustomRoles.Add(new CustomRole { Name = trimmed });
             await _db.SaveChangesAsync();
         }
-        return Ok(trimmed);
+        return new JsonResult(trimmed);
     }
 
     [HttpDelete("{name}")]
