@@ -88,17 +88,19 @@ public class AdminsController : ControllerBase
     [HttpPost("login")]
     [AllowAnonymous]
     public Task<ActionResult> Login(AdminLoginDto dto) =>
-        LoginWithRoles(dto, new[] { "superadmin", "admin", "moderator", "operator" }, panelScope: "admin");
+        // Admin paneli: operatordan başqa bütün rollar (superadmin/admin/moderator/xüsusi rollar) buradan girə bilər
+        LoginWithRoles(dto, allowedRoles: null, panelScope: "admin");
 
     [HttpPost("login-operator")]
     [AllowAnonymous]
     public Task<ActionResult> LoginOperator(AdminLoginDto dto) =>
         LoginWithRoles(dto, new[] { "operator" }, panelScope: "operator");
 
-    private async Task<ActionResult> LoginWithRoles(AdminLoginDto dto, string[] allowedRoles, string panelScope)
+    private async Task<ActionResult> LoginWithRoles(AdminLoginDto dto, string[]? allowedRoles, string panelScope)
     {
         var candidate = await _db.Admins.FirstOrDefaultAsync(a =>
-            a.Username == dto.Username.Trim() && a.Status == "active" && allowedRoles.Contains(a.Role));
+            a.Username == dto.Username.Trim() && a.Status == "active" &&
+            (allowedRoles == null || allowedRoles.Contains(a.Role)));
 
         if (candidate is null || !BCrypt.Net.BCrypt.Verify(dto.Password, candidate.PasswordHash))
             return Unauthorized();
