@@ -22,6 +22,18 @@ public class LogsController : ControllerBase
     public async Task<ActionResult<IEnumerable<LogEntry>>> GetAll() =>
         Ok(await _db.Logs.AsNoTracking().OrderByDescending(l => l.Timestamp).Take(1000).ToListAsync());
 
+    // Müraciət edənin IP-si: nginx proxy arxasındayıqsa X-Forwarded-For / X-Real-IP,
+    // birbaşa müraciətdə isə TCP bağlantısının ünvanı
+    private string? ClientIp()
+    {
+        var fwd = Request.Headers["X-Forwarded-For"].FirstOrDefault();
+        if (!string.IsNullOrWhiteSpace(fwd)) return fwd.Split(',')[0].Trim();
+        var real = Request.Headers["X-Real-IP"].FirstOrDefault();
+        if (!string.IsNullOrWhiteSpace(real)) return real.Trim();
+        var ip = HttpContext.Connection.RemoteIpAddress?.ToString();
+        return ip == "::1" ? "127.0.0.1" : ip;
+    }
+
     // Uğursuz login cəhdləri daxil olmaqla hər hansı JWT olmadan da yazıla bilməlidir
     [HttpPost]
     public async Task<ActionResult<LogEntry>> Add(LogCreateDto dto)
@@ -34,6 +46,7 @@ public class LogsController : ControllerBase
             Message = dto.Message,
             Detail = dto.Detail,
             Actor = dto.Actor ?? "Sistem",
+            Ip = ClientIp(),
         };
         _db.Logs.Add(item);
         await _db.SaveChangesAsync();

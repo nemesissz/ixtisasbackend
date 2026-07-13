@@ -27,5 +27,6 @@ public class LogEntry
     public string Message { get; set; } = default!;
     public string? Detail { get; set; }
     public string? Actor { get; set; }
+    public string? Ip { get; set; }
     public DateTime Timestamp { get; set; } = DateTime.UtcNow;
 }
