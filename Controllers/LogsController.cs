@@ -7,7 +7,7 @@ using MmuIspApi.Services;
 
 namespace MmuIspApi.Controllers;
 
-public record LogCreateDto(string Category, string Type, string Message, string? Detail, string? Actor, string? Ip);
+public record LogCreateDto(string Category, string Type, string Message, string? Detail, string? Actor);
 
 [ApiController]
 [Route("api/[controller]")]
@@ -46,9 +46,7 @@ public class LogsController : ControllerBase
             Message = dto.Message,
             Detail = dto.Detail,
             Actor = dto.Actor ?? "Sistem",
-            // Frontend host-dakı ip-helper-dən real IP-ni göndəribsə onu üstün tut
-            // (Docker Desktop Windows-da proxy mənbə IP-ni itirir); yoxsa özümüz tapaq
-            Ip = string.IsNullOrWhiteSpace(dto.Ip) ? ClientIp() : dto.Ip.Trim(),
+            Ip = ClientIp(),
         };
         _db.Logs.Add(item);
         await _db.SaveChangesAsync();
