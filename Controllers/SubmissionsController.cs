@@ -53,7 +53,9 @@ public class SubmissionsController : ControllerBase
 
         var item = new Submission
         {
-            Id = $"sub_{DateTimeOffset.UtcNow.ToUnixTimeMilliseconds():x}",
+            // ⚠ Konkurentlik: 100 kursant eyni millisaniyədə göndərəndə ID toqquşmasın deyə
+            // unikal Guid suffiksi əlavə olunur (əvvəl yalnız timestamp idi → duplicate PK → 500)
+            Id = $"sub_{DateTimeOffset.UtcNow.ToUnixTimeMilliseconds():x}_{Guid.NewGuid():N}",
             UserId = dto.UserId,
             UserName = dto.UserName,
             SelectionId = dto.SelectionId,
