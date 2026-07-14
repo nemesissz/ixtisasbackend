@@ -22,16 +22,28 @@ public class LogsController : ControllerBase
     public async Task<ActionResult<IEnumerable<LogEntry>>> GetAll() =>
         Ok(await _db.Logs.AsNoTracking().OrderByDescending(l => l.Timestamp).Take(1000).ToListAsync());
 
+    // IPv4-mapped IPv6 (::ffff:172.18.0.1) və loopback (::1) təmiz IPv4-ə gətir
+    private static string? Clean(string? ip)
+    {
+        if (string.IsNullOrWhiteSpace(ip)) return ip;
+        ip = ip.Trim();
+        if (ip == "::1") return "127.0.0.1";
+        const string mapped = "::ffff:";
+        if (ip.StartsWith(mapped, System.StringComparison.OrdinalIgnoreCase)) ip = ip[mapped.Length..];
+        return ip;
+    }
+
     // Müraciət edənin IP-si: nginx proxy arxasındayıqsa X-Forwarded-For / X-Real-IP,
     // birbaşa müraciətdə isə TCP bağlantısının ünvanı
     private string? ClientIp()
     {
         var fwd = Request.Headers["X-Forwarded-For"].FirstOrDefault();
-        if (!string.IsNullOrWhiteSpace(fwd)) return fwd.Split(',')[0].Trim();
+        if (!string.IsNullOrWhiteSpace(fwd)) return Clean(fwd.Split(',')[0]);
         var real = Request.Headers["X-Real-IP"].FirstOrDefault();
-        if (!string.IsNullOrWhiteSpace(real)) return real.Trim();
-        var ip = HttpContext.Connection.RemoteIpAddress?.ToString();
-        return ip == "::1" ? "127.0.0.1" : ip;
+        if (!string.IsNullOrWhiteSpace(real)) return Clean(real);
+        var addr = HttpContext.Connection.RemoteIpAddress;
+        if (addr != null && addr.IsIPv4MappedToIPv6) addr = addr.MapToIPv4();
+        return Clean(addr?.ToString());
     }
 
     // Uğursuz login cəhdləri daxil olmaqla hər hansı JWT olmadan da yazıla bilməlidir
