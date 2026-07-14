@@ -16,7 +16,7 @@ public class InstitutionsController : ControllerBase
     private readonly MmuDbContext _db;
     public InstitutionsController(MmuDbContext db) => _db = db;
 
-    // Tələbə/operator giriş ekranı institution siyahısını login-dən ƏVVƏL oxuyur — açıq qalır
+    // Tələbə giriş ekranı institution siyahısını login-dən ƏVVƏL oxuyur — açıq qalır
     [HttpGet]
     public async Task<ActionResult<IEnumerable<Institution>>> GetAll() =>
         Ok(await _db.Institutions.AsNoTracking().ToListAsync());

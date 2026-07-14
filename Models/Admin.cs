@@ -1,6 +1,6 @@
 namespace MmuIspApi.Models;
 
-// superadmin | admin | moderator | operator
+// superadmin | admin | moderator | (xüsusi rollar)
 public class Admin
 {
     public string Id { get; set; } = default!;
@@ -11,8 +11,8 @@ public class Admin
     // BCrypt hash — heç vaxt açıq mətn saxlanılmır
     public string PasswordHash { get; set; } = default!;
 
-    // Sərbəst mətn — superadmin/admin/moderator/operator daxil, admin CustomRole yarada bilər
-    public string Role { get; set; } = "operator";
+    // Sərbəst mətn — superadmin/admin/moderator daxil, admin CustomRole yarada bilər
+    public string Role { get; set; } = "admin";
     public string Status { get; set; } = "active";
     public DateTime? LastLogin { get; set; }
 

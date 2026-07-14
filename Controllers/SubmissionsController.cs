@@ -8,17 +8,17 @@ namespace MmuIspApi.Controllers;
 
 public record SubmissionSaveDto(string UserId, string? UserName, string SelectionId, List<string> Ranking);
 
-// admin/operator paneli üçün oxu, tələbə üçün öz sıralamasını göndərmə/oxuma
+// admin paneli üçün oxu, tələbə üçün öz sıralamasını göndərmə/oxuma
 [ApiController]
 [Route("api/[controller]")]
-[Authorize(Roles = "admin,operator,student")]
+[Authorize(Roles = "admin,student")]
 public class SubmissionsController : ControllerBase
 {
     private readonly MmuDbContext _db;
     public SubmissionsController(MmuDbContext db) => _db = db;
 
     [HttpGet]
-    [Authorize(Roles = "admin,operator")]
+    [Authorize(Roles = "admin")]
     public async Task<ActionResult<IEnumerable<Submission>>> GetAll() =>
         Ok(await _db.Submissions.AsNoTracking().ToListAsync());
 
@@ -31,7 +31,7 @@ public class SubmissionsController : ControllerBase
     }
 
     [HttpGet("by-selection/{selectionId}")]
-    [Authorize(Roles = "admin,operator")]
+    [Authorize(Roles = "admin")]
     public async Task<ActionResult<IEnumerable<Submission>>> GetBySelection(string selectionId) =>
         Ok(await _db.Submissions.AsNoTracking().Where(s => s.SelectionId == selectionId).ToListAsync());
 

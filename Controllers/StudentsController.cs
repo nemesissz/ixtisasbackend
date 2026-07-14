@@ -28,23 +28,23 @@ public record StudentBulkPatch(
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize(Roles = "admin,operator,student")]
+[Authorize(Roles = "admin,student")]
 public class StudentsController : ControllerBase
 {
     private readonly MmuDbContext _db;
     public StudentsController(MmuDbContext db) => _db = db;
 
-    // Tələbə tokeni yalnız ÖZ qeydinə çata bilər; admin/operator hər kimə
+    // Tələbə tokeni yalnız ÖZ qeydinə çata bilər; admin hər kimə
     private bool IsOwnRecordOrStaff(string studentId)
     {
-        if (User.IsInRole("admin") || User.IsInRole("operator")) return true;
+        if (User.IsInRole("admin")) return true;
         var selfId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
             ?? User.FindFirst("sub")?.Value;
         return selfId == studentId;
     }
 
     [HttpGet]
-    [Authorize(Roles = "admin,operator")]
+    [Authorize(Roles = "admin")]
     public async Task<ActionResult<IEnumerable<Student>>> GetAll([FromQuery] string? institutionId)
     {
         var query = _db.Students.AsNoTracking().AsQueryable();
@@ -129,8 +129,8 @@ public class StudentsController : ControllerBase
         if (item is null) return NotFound();
 
         // Tələbə özü yalnız "seçimi göndərdim" statusunu işarələyə bilər — digər sahələr
-        // (bal, yerləşdirmə və s.) yalnız admin/operator tərəfindən dəyişdirilə bilər
-        var isStaff = User.IsInRole("admin") || User.IsInRole("operator");
+        // (bal, yerləşdirmə və s.) yalnız admin tərəfindən dəyişdirilə bilər
+        var isStaff = User.IsInRole("admin");
         if (isStaff)
         {
             item.Name = dto.Name;

@@ -88,13 +88,8 @@ public class AdminsController : ControllerBase
     [HttpPost("login")]
     [AllowAnonymous]
     public Task<ActionResult> Login(AdminLoginDto dto) =>
-        // Admin paneli: operatordan başqa bütün rollar (superadmin/admin/moderator/xüsusi rollar) buradan girə bilər
+        // Admin paneli: bütün rollar (superadmin/admin/moderator/xüsusi rollar) buradan girir
         LoginWithRoles(dto, allowedRoles: null, panelScope: "admin");
-
-    [HttpPost("login-operator")]
-    [AllowAnonymous]
-    public Task<ActionResult> LoginOperator(AdminLoginDto dto) =>
-        LoginWithRoles(dto, new[] { "operator" }, panelScope: "operator");
 
     private async Task<ActionResult> LoginWithRoles(AdminLoginDto dto, string[]? allowedRoles, string panelScope)
     {
