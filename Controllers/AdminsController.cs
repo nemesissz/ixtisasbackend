@@ -58,16 +58,23 @@ public class AdminsController : ControllerBase
         var selfId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
             ?? User.FindFirst("sub")?.Value;
         var isSelf = selfId == id;
-        if (!isSelf && !User.IsInRole("superadmin") && !User.Claims.Any(c => c.Type == "perm" && c.Value == "admins.manage"))
+        var canManage = User.IsInRole("superadmin")
+            || User.Claims.Any(c => c.Type == "perm" && c.Value == "admins.manage");
+        if (!isSelf && !canManage)
             return Forbid();
 
         var item = await _db.Admins.FindAsync(id);
         if (item is null) return NotFound();
         item.Name = dto.Name;
         item.Email = dto.Email;
-        item.Role = dto.Role;
-        item.Status = dto.Status;
-        item.Permissions = dto.Permissions;
+        // Rol/status/icazələr yalnız admins.manage ilə dəyişilə bilər — əks halda
+        // DTO-da nə gəlirsə gəlsin iqnor olunur (öz-özünə superadmin vermə qarşısı)
+        if (canManage)
+        {
+            item.Role = dto.Role;
+            item.Status = dto.Status;
+            item.Permissions = dto.Permissions;
+        }
         if (!string.IsNullOrEmpty(dto.Password))
             item.PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.Password);
         await _db.SaveChangesAsync();
