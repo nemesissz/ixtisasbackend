@@ -17,6 +17,16 @@ public class SubmissionsController : ControllerBase
     private readonly MmuDbContext _db;
     public SubmissionsController(MmuDbContext db) => _db = db;
 
+    // Student yalnız ÖZ userId-si ilə əməliyyat apara bilər (token-dəki sub ilə tutuşdurulur);
+    // admin üçün məhdudiyyət yoxdur. Uyğunsuzluqda true → 403 qaytarılmalıdır.
+    private bool IsForbiddenForStudent(string userId)
+    {
+        if (User.IsInRole("admin")) return false;
+        var tokenUserId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
+            ?? User.FindFirst("sub")?.Value;
+        return tokenUserId != userId;
+    }
+
     [HttpGet]
     [Authorize(Roles = "admin")]
     public async Task<ActionResult<IEnumerable<Submission>>> GetAll() =>
@@ -25,6 +35,7 @@ public class SubmissionsController : ControllerBase
     [HttpGet("by-user")]
     public async Task<ActionResult<Submission>> GetByUser([FromQuery] string userId, [FromQuery] string selectionId)
     {
+        if (IsForbiddenForStudent(userId)) return Forbid();
         var sub = await _db.Submissions.AsNoTracking()
             .FirstOrDefaultAsync(s => s.UserId == userId && s.SelectionId == selectionId);
         return sub is null ? NotFound() : Ok(sub);
@@ -39,6 +50,7 @@ public class SubmissionsController : ControllerBase
     [HttpPost]
     public async Task<ActionResult<Submission>> Save(SubmissionSaveDto dto)
     {
+        if (IsForbiddenForStudent(dto.UserId)) return Forbid();
         var existing = await _db.Submissions
             .FirstOrDefaultAsync(s => s.UserId == dto.UserId && s.SelectionId == dto.SelectionId);
 
