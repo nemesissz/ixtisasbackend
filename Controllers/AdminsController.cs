@@ -7,8 +7,8 @@ using MmuIspApi.Services;
 
 namespace MmuIspApi.Controllers;
 
-public record AdminCreateDto(string Name, string? Email, string Username, string Password, string Role, List<string>? Permissions);
-public record AdminUpdateDto(string Name, string? Email, string? Password, string Role, string Status, List<string>? Permissions);
+public record AdminCreateDto(string Name, string? Email, string Username, string Password, string Role, List<string>? Permissions, List<string>? Institutions);
+public record AdminUpdateDto(string Name, string? Email, string? Password, string Role, string Status, List<string>? Permissions, List<string>? Institutions);
 public record AdminLoginDto(string Username, string Password);
 
 [ApiController]
@@ -24,7 +24,7 @@ public class AdminsController : ControllerBase
     [RequirePermission("admins.manage")]
     public async Task<ActionResult<IEnumerable<object>>> GetAll() =>
         Ok(await _db.Admins.AsNoTracking()
-            .Select(a => new { a.Id, a.Name, a.Email, a.Username, a.Role, a.Status, a.LastLogin, a.Permissions })
+            .Select(a => new { a.Id, a.Name, a.Email, a.Username, a.Role, a.Status, a.LastLogin, a.Permissions, a.Institutions })
             .ToListAsync());
 
     [HttpPost]
@@ -44,10 +44,12 @@ public class AdminsController : ControllerBase
             Role = dto.Role,
             Status = "active",
             Permissions = dto.Permissions,
+            // boş siyahı = məhdudiyyət yoxdur (bütün müəssisələr) → null saxla
+            Institutions = dto.Institutions is { Count: > 0 } ? dto.Institutions : null,
         };
         _db.Admins.Add(item);
         await _db.SaveChangesAsync();
-        return Ok(new { item.Id, item.Name, item.Email, item.Username, item.Role, item.Status, item.Permissions });
+        return Ok(new { item.Id, item.Name, item.Email, item.Username, item.Role, item.Status, item.Permissions, item.Institutions });
     }
 
     [HttpPut("{id}")]
@@ -74,6 +76,7 @@ public class AdminsController : ControllerBase
             item.Role = dto.Role;
             item.Status = dto.Status;
             item.Permissions = dto.Permissions;
+            item.Institutions = dto.Institutions is { Count: > 0 } ? dto.Institutions : null;
         }
         if (!string.IsNullOrEmpty(dto.Password))
             item.PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.Password);
@@ -111,8 +114,8 @@ public class AdminsController : ControllerBase
         await _db.SaveChangesAsync();
 
         var roles = candidate.Role == panelScope ? new[] { candidate.Role } : new[] { candidate.Role, panelScope };
-        var token = _jwt.CreateToken(candidate.Id, roles, candidate.Name, candidate.Permissions);
+        var token = _jwt.CreateToken(candidate.Id, roles, candidate.Name, candidate.Permissions, institutions: candidate.Institutions);
 
-        return Ok(new { token, candidate.Id, candidate.Name, candidate.Email, candidate.Username, candidate.Role, candidate.Permissions });
+        return Ok(new { token, candidate.Id, candidate.Name, candidate.Email, candidate.Username, candidate.Role, candidate.Permissions, candidate.Institutions });
     }
 }

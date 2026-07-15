@@ -50,6 +50,10 @@ public class StudentsController : ControllerBase
         var query = _db.Students.AsNoTracking().AsQueryable();
         if (!string.IsNullOrEmpty(institutionId))
             query = query.Where(s => s.InstitutionId == institutionId);
+        // Müəssisə əhatəsi: hesab məhdudlaşdırılıbsa yalnız icazəli müəssisələrin tələbələri
+        var allowed = User.AllowedInstitutions();
+        if (allowed is not null)
+            query = query.Where(s => allowed.Contains(s.InstitutionId));
         return Ok(await query.ToListAsync());
     }
 

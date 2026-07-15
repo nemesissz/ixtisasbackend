@@ -18,4 +18,8 @@ public class Admin
 
     // superadmin olmayan hesablar üçün fərdi icazə override-ları (permissions.ts:PERM_GROUPS kodları)
     public List<string>? Permissions { get; set; }
+
+    // Müəssisə əhatəsi: null/boş = bütün müəssisələr (superadmin və məhdudlaşdırılmamış hesablar).
+    // Doludursa hesab yalnız bu müəssisə(lər)in datasını görür (institution scope).
+    public List<string>? Institutions { get; set; }
 }

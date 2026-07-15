@@ -24,8 +24,14 @@ public class SelectionsController : ControllerBase
     public SelectionsController(MmuDbContext db) => _db = db;
 
     [HttpGet]
-    public async Task<ActionResult<IEnumerable<Selection>>> GetAll() =>
-        Ok(await _db.Selections.AsNoTracking().ToListAsync());
+    public async Task<ActionResult<IEnumerable<Selection>>> GetAll()
+    {
+        var query = _db.Selections.AsNoTracking().AsQueryable();
+        var allowed = User.AllowedInstitutions();
+        if (allowed is not null)
+            query = query.Where(s => allowed.Contains(s.InstitutionId));
+        return Ok(await query.ToListAsync());
+    }
 
     [HttpGet("archived")]
     [Authorize(Roles = "admin")]

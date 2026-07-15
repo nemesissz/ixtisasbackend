@@ -12,7 +12,7 @@ public class JwtTokenService
 
     // `roles`: real rolla yanaşı ümumi panel-scope-u da daşıyır (məs. ["moderator","admin"])
     // ki, [Authorize(Roles="admin")] bütün admin-panel hesablarını (superadmin/admin/moderator/custom) tutsun.
-    public string CreateToken(string id, IEnumerable<string> roles, string name, IEnumerable<string>? permissions = null, string? institutionId = null)
+    public string CreateToken(string id, IEnumerable<string> roles, string name, IEnumerable<string>? permissions = null, string? institutionId = null, IEnumerable<string>? institutions = null)
     {
         var jwt = _config.GetSection("Jwt");
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwt["Key"]!));
@@ -27,6 +27,9 @@ public class JwtTokenService
         if (institutionId is not null) claims.Add(new Claim("institutionId", institutionId));
         foreach (var p in permissions ?? Enumerable.Empty<string>())
             claims.Add(new Claim("perm", p));
+        // Müəssisə əhatəsi (scope) — doludursa hesab yalnız bu müəssisələri görür
+        foreach (var inst in institutions ?? Enumerable.Empty<string>())
+            claims.Add(new Claim("inst", inst));
 
         var token = new JwtSecurityToken(
             issuer: jwt["Issuer"],

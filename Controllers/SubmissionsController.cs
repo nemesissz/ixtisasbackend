@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using MmuIspApi.Data;
 using MmuIspApi.Models;
+using MmuIspApi.Services;
 
 namespace MmuIspApi.Controllers;
 
@@ -29,8 +30,19 @@ public class SubmissionsController : ControllerBase
 
     [HttpGet]
     [Authorize(Roles = "admin")]
-    public async Task<ActionResult<IEnumerable<Submission>>> GetAll() =>
-        Ok(await _db.Submissions.AsNoTracking().ToListAsync());
+    public async Task<ActionResult<IEnumerable<Submission>>> GetAll()
+    {
+        var query = _db.Submissions.AsNoTracking().AsQueryable();
+        // Müəssisə əhatəsi: yalnız icazəli müəssisələrin seçimlərinə aid göndərişlər
+        var allowed = User.AllowedInstitutions();
+        if (allowed is not null)
+        {
+            var selIds = await _db.Selections.AsNoTracking()
+                .Where(s => allowed.Contains(s.InstitutionId)).Select(s => s.Id).ToListAsync();
+            query = query.Where(s => selIds.Contains(s.SelectionId));
+        }
+        return Ok(await query.ToListAsync());
+    }
 
     [HttpGet("by-user")]
     public async Task<ActionResult<Submission>> GetByUser([FromQuery] string userId, [FromQuery] string selectionId)

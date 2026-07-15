@@ -16,10 +16,17 @@ public class InstitutionsController : ControllerBase
     private readonly MmuDbContext _db;
     public InstitutionsController(MmuDbContext db) => _db = db;
 
-    // Tələbə giriş ekranı institution siyahısını login-dən ƏVVƏL oxuyur — açıq qalır
+    // Tələbə giriş ekranı institution siyahısını login-dən ƏVVƏL oxuyur — açıq qalır.
+    // Müəssisə əhatəli admin girmişsə yalnız icazəli müəssisələri görür.
     [HttpGet]
-    public async Task<ActionResult<IEnumerable<Institution>>> GetAll() =>
-        Ok(await _db.Institutions.AsNoTracking().ToListAsync());
+    public async Task<ActionResult<IEnumerable<Institution>>> GetAll()
+    {
+        var query = _db.Institutions.AsNoTracking().AsQueryable();
+        var allowed = User.AllowedInstitutions();
+        if (allowed is not null)
+            query = query.Where(i => allowed.Contains(i.Id));
+        return Ok(await query.ToListAsync());
+    }
 
     [HttpGet("{id}")]
     public async Task<ActionResult<Institution>> Get(string id)

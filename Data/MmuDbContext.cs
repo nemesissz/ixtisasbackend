@@ -139,6 +139,7 @@ public class MmuDbContext : DbContext
             e.HasKey(x => x.Id);
             e.Property(x => x.Username).IsRequired().HasMaxLength(100);
             e.Property(x => x.Permissions).HasConversion(nullableStringListConverter, nullableStringListComparer).HasColumnType("json");
+            e.Property(x => x.Institutions).HasConversion(nullableStringListConverter, nullableStringListComparer).HasColumnType("json");
             e.HasIndex(x => x.Username).IsUnique();
         });
 
