@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using MmuIspApi.Data;
 using MmuIspApi.Models;
+using MmuIspApi.Services;
 
 namespace MmuIspApi.Controllers;
 
@@ -36,6 +37,8 @@ public class SystemSettingsController : ControllerBase
     [Authorize(Roles = "admin")]
     public async Task<IActionResult> SetInstConfig(string institutionId, InstLoginConfigDto dto)
     {
+        // Müəssisə əhatəsi: scoped admin yalnız öz müəssisəsinin login konfigini dəyişə bilər
+        if (!User.CanAccessInstitution(institutionId)) return Forbid();
         var cfg = await _db.InstitutionLoginConfigs.FirstOrDefaultAsync(c => c.InstitutionId == institutionId);
         if (cfg is null)
         {
