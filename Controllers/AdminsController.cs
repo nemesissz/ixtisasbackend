@@ -97,6 +97,7 @@ public class AdminsController : ControllerBase
 
     [HttpPost("login")]
     [AllowAnonymous]
+    [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("login")]
     public Task<ActionResult> Login(AdminLoginDto dto) =>
         // Admin paneli: bütün rollar (superadmin/admin/moderator/xüsusi rollar) buradan girir
         LoginWithRoles(dto, allowedRoles: null, panelScope: "admin");

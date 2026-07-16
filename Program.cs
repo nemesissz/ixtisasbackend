@@ -64,6 +64,35 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
 builder.Services.AddAuthorization();
 
+// Login endpoint-ləri üçün IP-yə görə rate-limit (brute-force qarşısı).
+// Hər IP dəqiqədə maksimum 100 login cəhdi — real izdiham (ayrı cihazlar, hər biri 1-2 cəhd)
+// təsirlənmir; yalnız bir IP-dən onlarla ard-arda cəhd (skript/hücum) 429 alır.
+const string loginRateLimit = "login";
+// Gerçək müştəri IP-si: nginx arxasında RemoteIpAddress həmişə nginx-dir, ona görə
+// X-Forwarded-For / X-Real-IP oxunur (nginx.conf bunları ötürür). Belə olmasa
+// bütün kursantlar bir IP kimi sayılıb real izdiham bloklanardı.
+static string ClientKey(HttpContext ctx)
+{
+    var fwd = ctx.Request.Headers["X-Forwarded-For"].FirstOrDefault();
+    if (!string.IsNullOrWhiteSpace(fwd)) return fwd.Split(',')[0].Trim();
+    var real = ctx.Request.Headers["X-Real-IP"].FirstOrDefault();
+    if (!string.IsNullOrWhiteSpace(real)) return real.Trim();
+    return ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+}
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddPolicy(loginRateLimit, httpContext =>
+        System.Threading.RateLimiting.RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: ClientKey(httpContext),
+            factory: _ => new System.Threading.RateLimiting.FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 100,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+            }));
+});
+
 const string frontendCorsPolicy = "FrontendCors";
 builder.Services.AddCors(options =>
 {
@@ -123,6 +152,8 @@ if (app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 
 app.UseCors(frontendCorsPolicy);
+
+app.UseRateLimiter();
 
 app.UseAuthentication();
 app.UseAuthorization();

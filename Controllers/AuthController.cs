@@ -19,6 +19,7 @@ public class AuthController : ControllerBase
     public AuthController(MmuDbContext db, JwtTokenService jwt) { _db = db; _jwt = jwt; }
 
     [HttpPost("student-login")]
+    [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("login")]
     public async Task<ActionResult> StudentLogin(StudentLoginDto dto)
     {
         var v1 = Norm(dto.Field1Value);
