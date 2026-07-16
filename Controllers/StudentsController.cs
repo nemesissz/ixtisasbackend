@@ -70,6 +70,7 @@ public class StudentsController : ControllerBase
     [RequirePermission("users.edit")]
     public async Task<ActionResult<Student>> Create(StudentCreateDto dto)
     {
+        if (!User.CanAccessInstitution(dto.InstitutionId)) return Forbid();
         var item = new Student
         {
             Id = string.IsNullOrEmpty(dto.Id) ? $"std_{DateTimeOffset.UtcNow.ToUnixTimeMilliseconds():x}" : dto.Id,
@@ -100,6 +101,7 @@ public class StudentsController : ControllerBase
     [RequirePermission("users.import")]
     public async Task<ActionResult> BulkCreate([FromBody] List<StudentCreateDto> dtos)
     {
+        if (dtos.Any(d => !User.CanAccessInstitution(d.InstitutionId))) return Forbid();
         var items = dtos.Select(dto => new Student
         {
             Id = string.IsNullOrEmpty(dto.Id) ? $"std_{DateTimeOffset.UtcNow.ToUnixTimeMilliseconds():x}_{Guid.NewGuid():N}"[..24] : dto.Id,
@@ -131,6 +133,8 @@ public class StudentsController : ControllerBase
         if (!IsOwnRecordOrStaff(id)) return Forbid();
         var item = await _db.Students.FindAsync(id);
         if (item is null) return NotFound();
+        // Scoped admin başqa müəssisənin tələbəsini dəyişə bilməz
+        if (User.IsInRole("admin") && !User.CanAccessInstitution(item.InstitutionId)) return Forbid();
 
         // Tələbə özü yalnız "seçimi göndərdim" statusunu işarələyə bilər — digər sahələr
         // (bal, yerləşdirmə və s.) yalnız admin tərəfindən dəyişdirilə bilər
@@ -169,6 +173,7 @@ public class StudentsController : ControllerBase
     {
         var ids = patches.Select(p => p.Id).ToList();
         var items = await _db.Students.Where(s => ids.Contains(s.Id)).ToListAsync();
+        if (items.Any(s => !User.CanAccessInstitution(s.InstitutionId))) return Forbid();
         var byId = items.ToDictionary(s => s.Id);
 
         foreach (var p in patches)
@@ -191,6 +196,7 @@ public class StudentsController : ControllerBase
     public async Task<IActionResult> DeleteMany([FromBody] List<string> ids)
     {
         var items = await _db.Students.Where(s => ids.Contains(s.Id)).ToListAsync();
+        if (items.Any(s => !User.CanAccessInstitution(s.InstitutionId))) return Forbid();
         _db.Students.RemoveRange(items);
         await _db.SaveChangesAsync();
         return NoContent();
@@ -203,6 +209,7 @@ public class StudentsController : ControllerBase
     {
         var item = await _db.Students.FindAsync(id);
         if (item is null) return NotFound();
+        if (!User.CanAccessInstitution(item.InstitutionId)) return Forbid();
         _db.Students.Remove(item);
         await _db.SaveChangesAsync();
         return NoContent();

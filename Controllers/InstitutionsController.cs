@@ -40,6 +40,8 @@ public class InstitutionsController : ControllerBase
     [RequirePermission("inst.create")]
     public async Task<ActionResult<Institution>> Create(InstitutionDto dto)
     {
+        // Müəssisə əhatəli hesab yeni müəssisə yarada bilməz (əhatəsindən kənar olardı)
+        if (User.AllowedInstitutions() is not null) return Forbid();
         var slug = Slugify(dto.Label);
         var id = $"{slug}_{DateTimeOffset.UtcNow.ToUnixTimeMilliseconds():x}";
         var item = new Institution { Id = id, Label = dto.Label, Icon = dto.Icon, Year = dto.Year };
@@ -53,6 +55,7 @@ public class InstitutionsController : ControllerBase
     [RequirePermission("inst.edit")]
     public async Task<IActionResult> Update(string id, InstitutionDto dto)
     {
+        if (!User.CanAccessInstitution(id)) return Forbid();
         var item = await _db.Institutions.FindAsync(id);
         if (item is null) return NotFound();
         item.Label = dto.Label;
@@ -67,6 +70,7 @@ public class InstitutionsController : ControllerBase
     [RequirePermission("inst.delete")]
     public async Task<IActionResult> Delete(string id)
     {
+        if (!User.CanAccessInstitution(id)) return Forbid();
         var item = await _db.Institutions.FindAsync(id);
         if (item is null) return NotFound();
         _db.Institutions.Remove(item);
@@ -80,6 +84,7 @@ public class InstitutionsController : ControllerBase
     [RequirePermission("users.delete")]
     public async Task<IActionResult> ResetStudents(string id)
     {
+        if (!User.CanAccessInstitution(id)) return Forbid();
         var students = await _db.Students.Where(s => s.InstitutionId == id).ToListAsync();
         foreach (var s in students)
         {

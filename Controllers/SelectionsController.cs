@@ -51,6 +51,7 @@ public class SelectionsController : ControllerBase
     [RequirePermission("sel.create")]
     public async Task<ActionResult<Selection>> Create(SelectionCreateDto dto)
     {
+        if (!User.CanAccessInstitution(dto.InstitutionId)) return Forbid();
         var item = new Selection
         {
             Id = $"sel_{DateTimeOffset.UtcNow.ToUnixTimeMilliseconds():x}",
@@ -77,6 +78,7 @@ public class SelectionsController : ControllerBase
     {
         var item = await _db.Selections.FindAsync(id);
         if (item is null) return NotFound();
+        if (!User.CanAccessInstitution(item.InstitutionId)) return Forbid();
         item.Name = dto.Name;
         item.StudentCount = dto.StudentCount;
         item.ChoiceCount = dto.ChoiceCount;
@@ -95,6 +97,7 @@ public class SelectionsController : ControllerBase
     {
         var item = await _db.Selections.FindAsync(id);
         if (item is null) return NotFound();
+        if (!User.CanAccessInstitution(item.InstitutionId)) return Forbid();
         _db.Selections.Remove(item);
         await _db.SaveChangesAsync();
         return NoContent();
@@ -124,6 +127,7 @@ public class SelectionsController : ControllerBase
     {
         var item = await _db.Selections.FindAsync(id);
         if (item is null) return NotFound();
+        if (!User.CanAccessInstitution(item.InstitutionId)) return Forbid();
         item.Status = status;
         apply(item);
         await _db.SaveChangesAsync();
@@ -139,6 +143,7 @@ public class SelectionsController : ControllerBase
     {
         var sel = await _db.Selections.FindAsync(id);
         if (sel is null) return NotFound();
+        if (!User.CanAccessInstitution(sel.InstitutionId)) return Forbid();
 
         var leafIds = await _db.SpecialtyNodes.AsNoTracking()
             .Where(n => n.TreeId == sel.TreeId && !_db.SpecialtyNodes.Any(c => c.ParentId == n.Id))

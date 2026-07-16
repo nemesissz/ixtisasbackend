@@ -28,6 +28,15 @@ public class SubmissionsController : ControllerBase
         return tokenUserId != userId;
     }
 
+    // Müəssisə əhatəsi: seçim icazəli müəssisəyə aiddirmi? (tələbə əhatəsizdir → həmişə true)
+    private async Task<bool> SelectionInScopeAsync(string selectionId)
+    {
+        if (User.AllowedInstitutions() is null) return true;
+        var instId = await _db.Selections.AsNoTracking()
+            .Where(s => s.Id == selectionId).Select(s => s.InstitutionId).FirstOrDefaultAsync();
+        return User.CanAccessInstitution(instId);
+    }
+
     [HttpGet]
     [Authorize(Roles = "admin")]
     public async Task<ActionResult<IEnumerable<Submission>>> GetAll()
@@ -48,6 +57,7 @@ public class SubmissionsController : ControllerBase
     public async Task<ActionResult<Submission>> GetByUser([FromQuery] string userId, [FromQuery] string selectionId)
     {
         if (IsForbiddenForStudent(userId)) return Forbid();
+        if (!await SelectionInScopeAsync(selectionId)) return Forbid();
         var sub = await _db.Submissions.AsNoTracking()
             .FirstOrDefaultAsync(s => s.UserId == userId && s.SelectionId == selectionId);
         return sub is null ? NotFound() : Ok(sub);
@@ -55,14 +65,18 @@ public class SubmissionsController : ControllerBase
 
     [HttpGet("by-selection/{selectionId}")]
     [Authorize(Roles = "admin")]
-    public async Task<ActionResult<IEnumerable<Submission>>> GetBySelection(string selectionId) =>
-        Ok(await _db.Submissions.AsNoTracking().Where(s => s.SelectionId == selectionId).ToListAsync());
+    public async Task<ActionResult<IEnumerable<Submission>>> GetBySelection(string selectionId)
+    {
+        if (!await SelectionInScopeAsync(selectionId)) return Forbid();
+        return Ok(await _db.Submissions.AsNoTracking().Where(s => s.SelectionId == selectionId).ToListAsync());
+    }
 
     // userId + selectionId üzrə upsert (varsa ranking-i yeniləyir, yoxdursa yaradır)
     [HttpPost]
     public async Task<ActionResult<Submission>> Save(SubmissionSaveDto dto)
     {
         if (IsForbiddenForStudent(dto.UserId)) return Forbid();
+        if (!await SelectionInScopeAsync(dto.SelectionId)) return Forbid();
         var existing = await _db.Submissions
             .FirstOrDefaultAsync(s => s.UserId == dto.UserId && s.SelectionId == dto.SelectionId);
 
@@ -95,6 +109,7 @@ public class SubmissionsController : ControllerBase
     [Authorize(Roles = "admin")]
     public async Task<IActionResult> DeleteByUser([FromQuery] string userId, [FromQuery] string selectionId)
     {
+        if (!await SelectionInScopeAsync(selectionId)) return Forbid();
         var sub = await _db.Submissions.FirstOrDefaultAsync(s => s.UserId == userId && s.SelectionId == selectionId);
         if (sub is null) return NotFound();
         _db.Submissions.Remove(sub);

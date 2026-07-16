@@ -12,4 +12,14 @@ public static class ScopeExtensions
         var ids = user.FindAll("inst").Select(c => c.Value).ToList();
         return ids.Count > 0 ? ids : null;
     }
+
+    // Yazma əməliyyatları üçün: hesab bu müəssisəyə toxuna bilərmi?
+    // Məhdudlaşdırılmamış hesab (superadmin) → həmişə true.
+    // Məhdud hesab → yalnız icazəli müəssisələr üçün true (boş/naməlum institution → false).
+    public static bool CanAccessInstitution(this ClaimsPrincipal user, string? institutionId)
+    {
+        var allowed = user.AllowedInstitutions();
+        if (allowed is null) return true;
+        return institutionId is not null && allowed.Contains(institutionId);
+    }
 }

@@ -79,6 +79,7 @@ public class SpecialtyTreesController : ControllerBase
     [RequirePermission("tree.edit")]
     public async Task<ActionResult<SpecialtyTree>> Create(SpecialtyTreeCreateDto dto)
     {
+        if (!User.CanAccessInstitution(dto.InstitutionId)) return Forbid();
         var item = new SpecialtyTree
         {
             Id = $"tree_{DateTimeOffset.UtcNow.ToUnixTimeMilliseconds():x}",
@@ -101,6 +102,7 @@ public class SpecialtyTreesController : ControllerBase
     {
         var item = await _db.SpecialtyTrees.FindAsync(id);
         if (item is null) return NotFound();
+        if (!User.CanAccessInstitution(item.InstitutionId)) return Forbid();
         item.Name = dto.Name;
         item.LevelNames = dto.LevelNames ?? item.LevelNames;
         item.Icon = dto.Icon;
@@ -118,6 +120,7 @@ public class SpecialtyTreesController : ControllerBase
     {
         var tree = await _db.SpecialtyTrees.FindAsync(id);
         if (tree is null) return NotFound();
+        if (!User.CanAccessInstitution(tree.InstitutionId)) return Forbid();
 
         var existing = await _db.SpecialtyNodes.Where(n => n.TreeId == id).ToListAsync();
         _db.SpecialtyNodes.RemoveRange(existing);
@@ -137,6 +140,7 @@ public class SpecialtyTreesController : ControllerBase
     {
         var item = await _db.SpecialtyTrees.FindAsync(id);
         if (item is null) return NotFound();
+        if (!User.CanAccessInstitution(item.InstitutionId)) return Forbid();
         _db.SpecialtyTrees.Remove(item);
         await _db.SaveChangesAsync();
         return NoContent();
