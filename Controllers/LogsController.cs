@@ -52,7 +52,9 @@ public class LogsController : ControllerBase
     {
         var item = new LogEntry
         {
-            Id = $"log_{DateTimeOffset.UtcNow.ToUnixTimeMilliseconds():x}",
+            // Konkurentlik: 100 kursant eyni millisaniyədə login edəndə log ID toqquşmasın deyə
+            // unikal Guid suffiksi (əvvəl yalnız timestamp idi → duplicate PK → 500, log itirdi)
+            Id = $"log_{DateTimeOffset.UtcNow.ToUnixTimeMilliseconds():x}_{Guid.NewGuid():N}",
             Category = dto.Category,
             Type = dto.Type,
             Message = dto.Message,
