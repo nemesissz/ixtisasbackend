@@ -46,10 +46,21 @@ public class LogsController : ControllerBase
         return Clean(addr?.ToString());
     }
 
-    // Uğursuz login cəhdləri daxil olmaqla hər hansı JWT olmadan da yazıla bilməlidir
+    // Uğursuz login cəhdləri JWT olmadan yazılmalıdır (istifadəçinin hələ tokeni yoxdur).
+    // Amma girişsiz çağırış YALNIZ uğursuz giriş logunu yaza bilər — əks halda kənar şəxs
+    // saxta/kütləvi log göndərib real audit izini (son 1000 limiti) sıxışdırıb çıxara bilər.
+    // Autentifikasiya olunmuş admin/tələbə (tokeni var) hər cür logu yaza bilər.
     [HttpPost]
     public async Task<ActionResult<LogEntry>> Add(LogCreateDto dto)
     {
+        if (!(User.Identity?.IsAuthenticated ?? false))
+        {
+            var isFailedLogin =
+                string.Equals(dto.Type, "warning", StringComparison.OrdinalIgnoreCase)
+                && (dto.Message?.Contains("giriş", StringComparison.OrdinalIgnoreCase) ?? false);
+            if (!isFailedLogin) return Unauthorized();
+        }
+
         var item = new LogEntry
         {
             // Konkurentlik: 100 kursant eyni millisaniyədə login edəndə log ID toqquşmasın deyə
