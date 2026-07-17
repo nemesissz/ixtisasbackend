@@ -169,8 +169,16 @@ public class StudentsController : ControllerBase
     // yerləşdirmə sahələrini bir sorğuda yeniləyir
     [HttpPost("bulk-update")]
     [Authorize(Roles = "admin")]
-    public async Task<IActionResult> BulkUpdate([FromBody] List<StudentBulkPatch> patches)
+    public async Task<IActionResult> BulkUpdate([FromBody] List<StudentBulkPatch> patches, [FromQuery] string? method)
     {
+        // Yerləşdirmə üsuluna görə icazə: sadə → dist.simple, paket → dist.packet.
+        // Superadmin həmişə keçir. method verilməyibsə (Redistribute və s.) əlavə yoxlama yoxdur.
+        if (method is "simple" or "packet" && !User.IsInRole("superadmin"))
+        {
+            var need = method == "packet" ? "dist.packet" : "dist.simple";
+            if (!User.Claims.Any(c => c.Type == "perm" && c.Value == need)) return Forbid();
+        }
+
         var ids = patches.Select(p => p.Id).ToList();
         var items = await _db.Students.Where(s => ids.Contains(s.Id)).ToListAsync();
         if (items.Any(s => !User.CanAccessInstitution(s.InstitutionId))) return Forbid();
