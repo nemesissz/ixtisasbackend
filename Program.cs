@@ -94,38 +94,86 @@ builder.Services.AddRateLimiter(options =>
 });
 
 const string frontendCorsPolicy = "FrontendCors";
+
+// İcazəli mənşələr:
+//   1) Cors__AllowedOrigins env dəyişəni verilibsə — yalnız oradakı siyahı
+//      (məs. "http://192.168.50.1,http://isp.mmu.local"). İnternetə açıq quraşdırmada bunu işlədin.
+//   2) Verilməyibsə — lokal maşın və DAXİLİ ŞƏBƏKƏ (RFC1918) mənşələri.
+//      Proqram LAN-da işlədiyi üçün lazımdır: frontend http://192.168.50.1:5174-dən
+//      açılıb API-yə http://192.168.50.1:5199 ilə müraciət edəndə bu cross-origin sayılır.
+//      Yalnız localhost-a icazə vermək şəbəkədəki bütün kompüterlərdə CORS xətası verirdi.
+//
+// Qeyd: nginx arxasında (istehsal Docker qurğusu) sorğular eyni mənşədən gedir,
+// ona görə orada bu siyasət ümumiyyətlə işə düşmür — bu, birbaşa giriş halı üçündür.
+var corsAllowedOrigins = builder.Configuration["Cors:AllowedOrigins"]
+    ?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+    ?? [];
+
+// Mənşə hostu lokal maşın və ya daxili (marşrutlanmayan) şəbəkə ünvanıdırmı
+static bool IsLocalOrPrivateHost(string host)
+{
+    if (host is "localhost" or "::1") return true;
+    if (!System.Net.IPAddress.TryParse(host, out var ip)) return false;
+    if (System.Net.IPAddress.IsLoopback(ip)) return true;
+    if (ip.AddressFamily != System.Net.Sockets.AddressFamily.InterNetwork) return false;
+
+    var b = ip.GetAddressBytes();
+    return b[0] switch
+    {
+        10 => true,                        // 10.0.0.0/8
+        172 => b[1] >= 16 && b[1] <= 31,   // 172.16.0.0/12
+        192 => b[1] == 168,                // 192.168.0.0/16
+        169 => b[1] == 254,                // 169.254.0.0/16 (link-local)
+        _ => false,
+    };
+}
+
 builder.Services.AddCors(options =>
 {
     options.AddPolicy(frontendCorsPolicy, policy =>
     {
-        // Vite dev server portu tutulu olsa avtomatik başqa port seçir (5173, 5174, ...) —
-        // ona görə port deyil, host-u yoxlayırıq (yalnız lokal development üçün təhlükəsizdir)
-        policy.SetIsOriginAllowed(origin =>
-            {
-                if (!Uri.TryCreate(origin, UriKind.Absolute, out var uri)) return false;
-                return uri.Host is "localhost" or "127.0.0.1";
-            })
-              .AllowAnyHeader()
-              .AllowAnyMethod();
+        if (corsAllowedOrigins.Length > 0)
+            policy.WithOrigins(corsAllowedOrigins);
+        else
+            // Port yoxlanmır: Vite tutulu portda 5173/5174/... arasında sıçrayır
+            policy.SetIsOriginAllowed(origin =>
+                Uri.TryCreate(origin, UriKind.Absolute, out var uri) && IsLocalOrPrivateHost(uri.Host));
+
+        policy.AllowAnyHeader().AllowAnyMethod();
     });
 });
 
 var app = builder.Build();
 
-// Superadmin yoxdursa bir dəfəlik yaradılır (parol BCrypt ilə hash-lənir)
+// Superadmin yoxdursa bir dəfəlik yaradılır (parol BCrypt ilə hash-lənir).
+// Parol mənbə kodunda saxlanmır — Seed__AdminPassword env dəyişənindən oxunur
+// (istehsalda .env faylından gəlir). Development-də rahatlıq üçün sabit dəyər işlənir.
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<MmuDbContext>();
     db.Database.Migrate();
     if (!db.Admins.Any(a => a.Role == "superadmin"))
     {
+        var seed = app.Configuration.GetSection("Seed");
+        var seedPassword = seed["AdminPassword"];
+
+        if (string.IsNullOrWhiteSpace(seedPassword))
+        {
+            // İstehsalda susmaqla zəif parola düşmək təhlükəlidir — açıq xəta veririk
+            if (!app.Environment.IsDevelopment())
+                throw new InvalidOperationException(
+                    "Superadmin yaradıla bilmir: Seed__AdminPassword təyin olunmayıb. " +
+                    ".env faylında SEED_ADMIN_PASSWORD dəyərini verin və konteyneri yenidən başladın.");
+            seedPassword = "Admin@2026";
+        }
+
         db.Admins.Add(new MmuIspApi.Models.Admin
         {
             Id = "adm_super_1",
             Name = "Super Admin",
-            Email = "admin@mmu.az",
-            Username = "admin",
-            PasswordHash = BCrypt.Net.BCrypt.HashPassword("Admin@2026"),
+            Email = seed["AdminEmail"] ?? "admin@mmu.az",
+            Username = seed["AdminUsername"] ?? "admin",
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword(seedPassword),
             Role = "superadmin",
             Status = "active",
         });
@@ -149,7 +197,10 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-app.UseHttpsRedirection();
+// İstehsalda konteynerdə yalnız HTTP portu var (TLS/şəbəkə girişini nginx idarə edir) —
+// belə olduqda yönləndirmə hədəf port tapa bilmir və hər başlanğıcda xəbərdarlıq verir.
+if (app.Environment.IsDevelopment())
+    app.UseHttpsRedirection();
 
 app.UseCors(frontendCorsPolicy);
 
@@ -159,5 +210,15 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+
+// Sadə canlılıq yoxlaması — serverdə `curl http://localhost/api/health` ilə
+// backend-in qalxdığını və bazaya çıxışının olduğunu bir əmrlə görmək üçün
+app.MapGet("/api/health", async (MmuDbContext db) =>
+{
+    var dbOk = await db.Database.CanConnectAsync();
+    return dbOk
+        ? Results.Ok(new { status = "ok", database = "ok" })
+        : Results.Json(new { status = "degraded", database = "unreachable" }, statusCode: 503);
+}).AllowAnonymous();
 
 app.Run();
