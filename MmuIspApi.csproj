@@ -18,9 +18,23 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Lokal import-bhk əmri üçün output-a kopyalanır, amma PUBLISH-ə DÜŞMÜR:
+         bu fayllarda 388 kursantın real şəxsi məlumatı var (ad, FİN, iş nömrəsi,
+         bal). Publish çıxışı və Docker image üçüncü şəxslərə verilir. -->
     <None Update="SeedData\*.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>Never</CopyToPublishDirectory>
     </None>
+    <Content Update="SeedData\*.json">
+      <CopyToPublishDirectory>Never</CopyToPublishDirectory>
+    </Content>
+
+    <!-- Development konfiqurasiyasında real DB parolu və JWT açarı var — bu fayl
+         .gitignore-dadır, publish çıxışına da düşməməlidir. İstehsalda bütün
+         dəyərlər env dəyişənlərindən (.env) gəlir. -->
+    <Content Update="appsettings.Development.json">
+      <CopyToPublishDirectory>Never</CopyToPublishDirectory>
+    </Content>
   </ItemGroup>
 
 </Project>

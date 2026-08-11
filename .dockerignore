@@ -2,3 +2,12 @@ bin
 obj
 .git
 *.md
+
+# Real DB parolu və JWT açarı — image-ə heç vaxt düşməməlidir
+appsettings.Development.json
+appsettings.Local.json
+
+# 388 kursantın real şəxsi məlumatı (ad, FİN, iş nömrəsi) — image üçüncü
+# şəxslərə verilir, bu fayllar orada olmamalıdır. Baza onsuz da MySQL-dədir.
+# (BhkImporter.cs qalır — kompilyasiya üçün lazımdır, data daşımır)
+SeedData/*.json
