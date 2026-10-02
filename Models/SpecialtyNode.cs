@@ -28,6 +28,13 @@ public class SpecialtyNode
     // Bu node yalnız bu qruplara aid tələbələrə göstərilir (boşdursa hamıya açıqdır)
     public List<string>? Groups { get; set; }
 
+    // Qrupdan ƏLAVƏ məhdudiyyətlər: cədvəldəki sütun adı -> icazə verilən dəyərlər.
+    // Məsələn {"Qoşun növü": ["QQ"]} — yalnız qoşun növü QQ olanlar bu node-u görür.
+    // Sütun adı təhsilalan cədvəlindəki sütunlarla eynidir (Qoşun növü, Mənbə,
+    // Cins, Tədris ili, ...); belə sütun hər təhsilalan qrupunda olmaya bilər,
+    // dəyəri boş olan təhsilalana məhdudiyyət tətbiq edilmir.
+    public Dictionary<string, List<string>>? Filters { get; set; }
+
     public string? QuotaMode { get; set; }   // "auto" | "manual"
     public int? MulkiQuota { get; set; }
     public int? LiseyQuota { get; set; }

@@ -8,17 +8,23 @@ using MmuIspApi.Services;
 namespace MmuIspApi.Controllers;
 
 public record StudentCreateDto(
-    string? Id, string InstitutionId, string Name, string? ParentName, string? WorkNumber, string? Fin,
+    string? Id, string InstitutionId, string? CohortId, string Name, string? ParentName, string? WorkNumber, string? Fin,
     decimal? Score, string? Group, string? Source, string? Gender, string? Year,
     int? Packet, string? Status, string? PrintStatus,
-    Dictionary<string, decimal>? Subjects, Dictionary<int, string>? BranchByLevel);
+    Dictionary<string, decimal>? Subjects, Dictionary<int, string>? BranchByLevel,
+    Dictionary<string, string>? ExtraFields,
+    // Arxivdən bərpa: yerləşdirmə nəticəsi də geri yazılmalıdır, yoxsa bərpa olunan
+    // təhsilalan "yerləşdirilməyib" kimi görünür. Adi idxalda bu sahələr null olur.
+    string? PlacedSpecialty = null, string? PlacedSpecialtyId = null,
+    string? PlacedSelectionId = null, int? ChoiceNum = null);
 
 public record StudentUpdateDto(
-    string Name, string? ParentName, string? WorkNumber, string? Fin,
+    string? CohortId, string Name, string? ParentName, string? WorkNumber, string? Fin,
     decimal? Score, string? Group, string? Source, string? Gender, string? Year,
     int? Packet, string? Status, string? PrintStatus,
     string? PlacedSpecialty, string? PlacedSpecialtyId, string? PlacedSelectionId, int? ChoiceNum,
-    Dictionary<string, decimal>? Subjects, Dictionary<int, string>? BranchByLevel);
+    Dictionary<string, decimal>? Subjects, Dictionary<int, string>? BranchByLevel,
+    Dictionary<string, string>? ExtraFields);
 
 // Distribution/Redistribute-in "bazaya yaz"/"rollback"/"qismən yenidən yerləşdirmə" əməliyyatları
 // üçün — yalnız yerləşdirmə ilə bağlı sahələr, hamısı bir sorğuda təhvil verilir
@@ -45,11 +51,16 @@ public class StudentsController : ControllerBase
 
     [HttpGet]
     [Authorize(Roles = "admin")]
-    public async Task<ActionResult<IEnumerable<Student>>> GetAll([FromQuery] string? institutionId)
+    public async Task<ActionResult<IEnumerable<Student>>> GetAll([FromQuery] string? institutionId, [FromQuery] string? cohortId)
     {
         var query = _db.Students.AsNoTracking().AsQueryable();
         if (!string.IsNullOrEmpty(institutionId))
             query = query.Where(s => s.InstitutionId == institutionId);
+        // cohortId=none → hələ heç bir qrupa aid edilməyənlər
+        if (cohortId == "none")
+            query = query.Where(s => s.CohortId == null);
+        else if (!string.IsNullOrEmpty(cohortId))
+            query = query.Where(s => s.CohortId == cohortId);
         // Müəssisə əhatəsi: hesab məhdudlaşdırılıbsa yalnız icazəli müəssisələrin tələbələri
         var allowed = User.AllowedInstitutions();
         if (allowed is not null)
@@ -80,6 +91,7 @@ public class StudentsController : ControllerBase
             WorkNumber = dto.WorkNumber,
             Fin = dto.Fin,
             Score = dto.Score,
+            CohortId = dto.CohortId,
             Group = dto.Group,
             Source = dto.Source,
             Gender = dto.Gender,
@@ -89,6 +101,11 @@ public class StudentsController : ControllerBase
             PrintStatus = dto.PrintStatus ?? "not_printed",
             Subjects = dto.Subjects ?? new(),
             BranchByLevel = dto.BranchByLevel ?? new(),
+            ExtraFields = dto.ExtraFields ?? new(),
+            PlacedSpecialty = dto.PlacedSpecialty,
+            PlacedSpecialtyId = dto.PlacedSpecialtyId,
+            PlacedSelectionId = dto.PlacedSelectionId,
+            ChoiceNum = dto.ChoiceNum,
         };
         _db.Students.Add(item);
         await _db.SaveChangesAsync();
@@ -111,6 +128,7 @@ public class StudentsController : ControllerBase
             WorkNumber = dto.WorkNumber,
             Fin = dto.Fin,
             Score = dto.Score,
+            CohortId = dto.CohortId,
             Group = dto.Group,
             Source = dto.Source,
             Gender = dto.Gender,
@@ -120,6 +138,11 @@ public class StudentsController : ControllerBase
             PrintStatus = dto.PrintStatus ?? "not_printed",
             Subjects = dto.Subjects ?? new(),
             BranchByLevel = dto.BranchByLevel ?? new(),
+            ExtraFields = dto.ExtraFields ?? new(),
+            PlacedSpecialty = dto.PlacedSpecialty,
+            PlacedSpecialtyId = dto.PlacedSpecialtyId,
+            PlacedSelectionId = dto.PlacedSelectionId,
+            ChoiceNum = dto.ChoiceNum,
         }).ToList();
 
         _db.Students.AddRange(items);
@@ -146,6 +169,7 @@ public class StudentsController : ControllerBase
             item.WorkNumber = dto.WorkNumber;
             item.Fin = dto.Fin;
             item.Score = dto.Score;
+            item.CohortId = dto.CohortId;
             item.Group = dto.Group;
             item.Source = dto.Source;
             item.Gender = dto.Gender;
@@ -158,6 +182,7 @@ public class StudentsController : ControllerBase
             item.ChoiceNum = dto.ChoiceNum;
             if (dto.Subjects is not null) item.Subjects = dto.Subjects;
             if (dto.BranchByLevel is not null) item.BranchByLevel = dto.BranchByLevel;
+            if (dto.ExtraFields is not null) item.ExtraFields = dto.ExtraFields;
         }
         if (dto.Status is not null) item.Status = dto.Status;
 
@@ -171,11 +196,17 @@ public class StudentsController : ControllerBase
     [Authorize(Roles = "admin")]
     public async Task<IActionResult> BulkUpdate([FromBody] List<StudentBulkPatch> patches, [FromQuery] string? method)
     {
-        // Yerləşdirmə üsuluna görə icazə: sadə → dist.simple, paket → dist.packet.
+        // Əməliyyata görə icazə: sadə yerləşdirmə → dist.simple, paket → dist.packet,
+        // nəticələrin sıfırlanması → results.reset.
         // Superadmin həmişə keçir. method verilməyibsə (Redistribute və s.) əlavə yoxlama yoxdur.
-        if (method is "simple" or "packet" && !User.IsInRole("superadmin"))
+        if (method is "simple" or "packet" or "reset" && !User.IsInRole("superadmin"))
         {
-            var need = method == "packet" ? "dist.packet" : "dist.simple";
+            var need = method switch
+            {
+                "packet" => "dist.packet",
+                "reset"  => "results.reset",
+                _        => "dist.simple",
+            };
             if (!User.Claims.Any(c => c.Type == "perm" && c.Value == need)) return Forbid();
         }
 

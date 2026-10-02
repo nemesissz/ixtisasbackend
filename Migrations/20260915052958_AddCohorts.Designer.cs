@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using MmuIspApi.Data;
 
@@ -11,9 +12,11 @@ using MmuIspApi.Data;
 namespace MmuIspApi.Migrations
 {
     [DbContext(typeof(MmuDbContext))]
-    partial class MmuDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260915052958_AddCohorts")]
+    partial class AddCohorts
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -229,57 +232,6 @@ namespace MmuIspApi.Migrations
                     b.ToTable("Logs");
                 });
 
-            modelBuilder.Entity("MmuIspApi.Models.MonitorConfig", b =>
-                {
-                    b.Property<int>("Id")
-                        .HasColumnType("int");
-
-                    b.Property<int>("AbandonMin")
-                        .HasColumnType("int");
-
-                    b.Property<bool>("Enabled")
-                        .HasColumnType("tinyint(1)");
-
-                    b.Property<int>("HeartbeatSec")
-                        .HasColumnType("int");
-
-                    b.Property<int>("OfflineSec")
-                        .HasColumnType("int");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("MonitorConfigs");
-                });
-
-            modelBuilder.Entity("MmuIspApi.Models.MonitorSession", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<DateTime?>("EndedAt")
-                        .HasColumnType("datetime(6)");
-
-                    b.Property<DateTime?>("LastPausedAt")
-                        .HasColumnType("datetime(6)");
-
-                    b.Property<int>("PausedSeconds")
-                        .HasColumnType("int");
-
-                    b.Property<DateTime>("StartedAt")
-                        .HasColumnType("datetime(6)");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasColumnType("longtext");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("MonitorSessions");
-                });
-
             modelBuilder.Entity("MmuIspApi.Models.Selection", b =>
                 {
                     b.Property<string>("Id")
@@ -296,6 +248,10 @@ namespace MmuIspApi.Migrations
 
                     b.Property<DateTime?>("ClosedAt")
                         .HasColumnType("datetime(6)");
+
+                    b.Property<string>("CohortIds")
+                        .IsRequired()
+                        .HasColumnType("json");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime(6)");
@@ -357,9 +313,6 @@ namespace MmuIspApi.Migrations
                     b.Property<bool?>("AllowMale")
                         .HasColumnType("tinyint(1)");
 
-                    b.Property<string>("Filters")
-                        .HasColumnType("json");
-
                     b.Property<string>("GroupTiebreakers")
                         .HasColumnType("json");
 
@@ -419,9 +372,6 @@ namespace MmuIspApi.Migrations
                     b.Property<DateTime?>("ArchivedAt")
                         .HasColumnType("datetime(6)");
 
-                    b.Property<string>("CohortId")
-                        .HasColumnType("varchar(255)");
-
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime(6)");
 
@@ -452,8 +402,6 @@ namespace MmuIspApi.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("CohortId");
-
                     b.HasIndex("InstitutionId");
 
                     b.ToTable("SpecialtyTrees");
@@ -473,10 +421,6 @@ namespace MmuIspApi.Migrations
 
                     b.Property<string>("CohortId")
                         .HasColumnType("varchar(255)");
-
-                    b.Property<string>("ExtraFields")
-                        .IsRequired()
-                        .HasColumnType("json");
 
                     b.Property<string>("Fin")
                         .HasColumnType("varchar(255)");
@@ -550,49 +494,6 @@ namespace MmuIspApi.Migrations
                     b.ToTable("Students");
                 });
 
-            modelBuilder.Entity("MmuIspApi.Models.StudentPresence", b =>
-                {
-                    b.Property<string>("StudentId")
-                        .HasColumnType("varchar(255)");
-
-                    b.Property<string>("Fin")
-                        .HasColumnType("longtext");
-
-                    b.Property<string>("Group")
-                        .HasColumnType("longtext");
-
-                    b.Property<string>("InstitutionId")
-                        .HasColumnType("longtext");
-
-                    b.Property<DateTime>("LastSeenAt")
-                        .HasColumnType("datetime(6)");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("varchar(200)");
-
-                    b.Property<int>("SessionId")
-                        .HasColumnType("int");
-
-                    b.Property<DateTime>("StartedAt")
-                        .HasColumnType("datetime(6)");
-
-                    b.Property<string>("State")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("varchar(20)");
-
-                    b.Property<DateTime?>("SubmittedAt")
-                        .HasColumnType("datetime(6)");
-
-                    b.HasKey("StudentId");
-
-                    b.HasIndex("SessionId");
-
-                    b.ToTable("StudentPresences");
-                });
-
             modelBuilder.Entity("MmuIspApi.Models.Submission", b =>
                 {
                     b.Property<string>("Id")
@@ -643,9 +544,6 @@ namespace MmuIspApi.Migrations
 
                     b.Property<int>("RedirectDelaySec")
                         .HasColumnType("int");
-
-                    b.Property<string>("SubmitNotice")
-                        .HasColumnType("longtext");
 
                     b.HasKey("Id");
 
@@ -747,18 +645,11 @@ namespace MmuIspApi.Migrations
 
             modelBuilder.Entity("MmuIspApi.Models.SpecialtyTree", b =>
                 {
-                    b.HasOne("MmuIspApi.Models.Cohort", "Cohort")
-                        .WithMany("SpecialtyTrees")
-                        .HasForeignKey("CohortId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
                     b.HasOne("MmuIspApi.Models.Institution", "Institution")
                         .WithMany("SpecialtyTrees")
                         .HasForeignKey("InstitutionId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
-
-                    b.Navigation("Cohort");
 
                     b.Navigation("Institution");
                 });
@@ -816,8 +707,6 @@ namespace MmuIspApi.Migrations
 
             modelBuilder.Entity("MmuIspApi.Models.Cohort", b =>
                 {
-                    b.Navigation("SpecialtyTrees");
-
                     b.Navigation("Students");
                 });
 

@@ -9,6 +9,7 @@ public class MmuDbContext : DbContext
     public MmuDbContext(DbContextOptions<MmuDbContext> options) : base(options) { }
 
     public DbSet<Institution> Institutions => Set<Institution>();
+    public DbSet<Cohort> Cohorts => Set<Cohort>();
     public DbSet<SpecialtyTree> SpecialtyTrees => Set<SpecialtyTree>();
     public DbSet<SpecialtyNode> SpecialtyNodes => Set<SpecialtyNode>();
     public DbSet<Selection> Selections => Set<Selection>();
@@ -21,6 +22,9 @@ public class MmuDbContext : DbContext
     public DbSet<LogEntry> Logs => Set<LogEntry>();
     public DbSet<InstitutionLoginConfig> InstitutionLoginConfigs => Set<InstitutionLoginConfig>();
     public DbSet<SystemSetting> SystemSettings => Set<SystemSetting>();
+    public DbSet<MonitorConfig> MonitorConfigs => Set<MonitorConfig>();
+    public DbSet<MonitorSession> MonitorSessions => Set<MonitorSession>();
+    public DbSet<StudentPresence> StudentPresences => Set<StudentPresence>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -70,12 +74,32 @@ public class MmuDbContext : DbContext
             v => v.Aggregate(0, (h, kv) => HashCode.Combine(h, kv.Key.GetHashCode(), kv.Value.GetHashCode())),
             v => v.ToDictionary(kv => kv.Key, kv => kv.Value));
 
+        var extraFieldsConverter = new Microsoft.EntityFrameworkCore.Storage.ValueConversion.ValueConverter<Dictionary<string, string>, string>(
+            v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
+            v => JsonSerializer.Deserialize<Dictionary<string, string>>(v, (JsonSerializerOptions?)null) ?? new Dictionary<string, string>());
+
+        var extraFieldsComparer = new Microsoft.EntityFrameworkCore.ChangeTracking.ValueComparer<Dictionary<string, string>>(
+            (a, b) => (a ?? new()).SequenceEqual(b ?? new()),
+            v => v.Aggregate(0, (h, kv) => HashCode.Combine(h, kv.Key.GetHashCode(), kv.Value.GetHashCode())),
+            v => v.ToDictionary(kv => kv.Key, kv => kv.Value));
+
         // ── Institution ──────────────────────────────────────────────
         modelBuilder.Entity<Institution>(e =>
         {
             e.HasKey(x => x.Id);
             e.Property(x => x.Label).IsRequired().HasMaxLength(200);
             e.Property(x => x.Icon).HasColumnType("longtext");
+        });
+
+        // ── Cohort (təhsilalan qrupu) ────────────────────────────────
+        modelBuilder.Entity<Cohort>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Label).IsRequired().HasMaxLength(200);
+            e.Property(x => x.Icon).HasColumnType("longtext");
+            e.HasOne(x => x.Institution).WithMany(i => i.Cohorts)
+                .HasForeignKey(x => x.InstitutionId).OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(x => new { x.InstitutionId, x.SortOrder });
         });
 
         // ── SpecialtyTree ────────────────────────────────────────────
@@ -87,6 +111,10 @@ public class MmuDbContext : DbContext
             e.Property(x => x.Icon).HasColumnType("longtext");
             e.HasOne(x => x.Institution).WithMany(i => i.SpecialtyTrees)
                 .HasForeignKey(x => x.InstitutionId).OnDelete(DeleteBehavior.Cascade);
+            // Qrup silinsə struktur itməsin — yalnız bağı qopar
+            e.HasOne(x => x.Cohort).WithMany(c => c.SpecialtyTrees)
+                .HasForeignKey(x => x.CohortId).OnDelete(DeleteBehavior.SetNull);
+            e.HasIndex(x => x.CohortId);
         });
 
         // ── SpecialtyNode ────────────────────────────────────────────
@@ -96,6 +124,7 @@ public class MmuDbContext : DbContext
             e.Property(x => x.Name).IsRequired().HasMaxLength(300);
             e.Property(x => x.Tiebreaker).HasConversion(nullableStringListConverter, nullableStringListComparer).HasColumnType("json");
             e.Property(x => x.Groups).HasConversion(nullableStringListConverter, nullableStringListComparer).HasColumnType("json");
+            e.Property(x => x.Filters).HasConversion(groupTiebreakersConverter, groupTiebreakersComparer).HasColumnType("json");
             e.Property(x => x.GroupTiebreakers).HasConversion(groupTiebreakersConverter, groupTiebreakersComparer).HasColumnType("json");
             e.HasOne(x => x.Tree).WithMany(t => t.Nodes)
                 .HasForeignKey(x => x.TreeId).OnDelete(DeleteBehavior.Cascade);
@@ -123,8 +152,12 @@ public class MmuDbContext : DbContext
             e.Property(x => x.Name).IsRequired().HasMaxLength(200);
             e.Property(x => x.Subjects).HasConversion(subjectsConverter, subjectsComparer).HasColumnType("json");
             e.Property(x => x.BranchByLevel).HasConversion(branchByLevelConverter, branchByLevelComparer).HasColumnType("json");
+            e.Property(x => x.ExtraFields).HasConversion(extraFieldsConverter, extraFieldsComparer).HasColumnType("json");
             e.HasOne(x => x.Institution).WithMany(i => i.Students)
                 .HasForeignKey(x => x.InstitutionId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(x => x.Cohort).WithMany(c => c.Students)
+                .HasForeignKey(x => x.CohortId).OnDelete(DeleteBehavior.SetNull);
+            e.HasIndex(x => new { x.CohortId, x.WorkNumber });
             e.HasOne(x => x.PlacedSpecialtyNode).WithMany()
                 .HasForeignKey(x => x.PlacedSpecialtyId).OnDelete(DeleteBehavior.SetNull);
             e.HasOne(x => x.PlacedSelection).WithMany()
@@ -192,6 +225,21 @@ public class MmuDbContext : DbContext
         {
             e.HasKey(x => x.Id);
             e.Property(x => x.PrioritySubjects).HasConversion(stringListConverter, stringListComparer).HasColumnType("json");
+        });
+
+        // ── Canlı nəzarət ────────────────────────────────────────────
+        modelBuilder.Entity<MonitorConfig>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).ValueGeneratedNever();
+        });
+        modelBuilder.Entity<MonitorSession>(e => e.HasKey(x => x.Id));
+        modelBuilder.Entity<StudentPresence>(e =>
+        {
+            e.HasKey(x => x.StudentId);
+            e.Property(x => x.Name).HasMaxLength(200);
+            e.Property(x => x.State).HasMaxLength(20);
+            e.HasIndex(x => x.SessionId);
         });
     }
 }

@@ -1,4 +1,4 @@
-using System.Text.Json.Serialization;
+﻿using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -10,10 +10,13 @@ namespace MmuIspApi.Controllers;
 
 public record SpecialtyTreeCreateDto(
     string Name, string InstitutionId, List<string> LevelNames,
-    string? Icon, string? Year, bool SourceProportional);
+    string? Icon, string? Year, bool SourceProportional,
+    // Bu struktur hansı təhsilalan qrupu üçündür (null = bütün müəssisə)
+    string? CohortId = null);
 
 public record SpecialtyTreeUpdateDto(
-    string Name, List<string> LevelNames, string? Icon, string? Year, bool SourceProportional);
+    string Name, List<string> LevelNames, string? Icon, string? Year, bool SourceProportional,
+    string? CohortId = null);
 
 // Nested node şəkli — frontend-dəki TNode (Specialties.tsx) ilə eynidir.
 // JsonPropertyName: frontend sahə adı "mülkiQuota" (ü hərfi ilə) — default camelCase
@@ -21,6 +24,7 @@ public record SpecialtyTreeUpdateDto(
 public record SpecialtyNodeDto(
     string Id, string Name, int? Quota, List<SpecialtyNodeDto> Children,
     List<string>? Tiebreaker, Dictionary<string, List<string>>? GroupTiebreakers, List<string>? Groups,
+    Dictionary<string, List<string>>? Filters,
     string? QuotaMode,
     [property: JsonPropertyName("mülkiQuota")] int? MulkiQuota,
     int? LiseyQuota,
@@ -38,9 +42,12 @@ public class SpecialtyTreesController : ControllerBase
     // (treeDb.countSpecialties/totalQuota kimi funksiyalar getAll() siyahısındakı ağaclar üzərində
     // birbaşa işləyir) — ona görə siyahı endpoint-i də hər ağacı tam (nodes daxil) qaytarır.
     [HttpGet]
-    public async Task<ActionResult<IEnumerable<object>>> GetAll()
+    public async Task<ActionResult<IEnumerable<object>>> GetAll([FromQuery] bool archived = false)
     {
-        var trees = await _db.SpecialtyTrees.AsNoTracking().ToListAsync();
+        // archived=false → yalnız aktiv strukturlar (İxtisaslar səhifəsi)
+        // archived=true  → yalnız arxivdəkilər (Arxiv səhifəsi)
+        var trees = await _db.SpecialtyTrees.AsNoTracking()
+            .Where(t => t.IsArchived == archived).ToListAsync();
         var allNodes = await _db.SpecialtyNodes.AsNoTracking().OrderBy(n => n.SortOrder).ToListAsync();
         var nodesByTree = allNodes.GroupBy(n => n.TreeId).ToDictionary(g => g.Key, g => g.ToList());
 
@@ -66,10 +73,15 @@ public class SpecialtyTreesController : ControllerBase
         tree.Id,
         tree.Name,
         tree.InstitutionId,
+        // Strukturun təhsilalan qrupu — frontend bunu oxuyur və geri yazır;
+        // burada olmasa hər yeniləmədə qrup itərdi.
+        tree.CohortId,
         tree.LevelNames,
         tree.Icon,
         tree.Year,
         tree.SourceProportional,
+        tree.IsArchived,
+        tree.ArchivedAt,
         tree.CreatedAt,
         Nodes = BuildTree(nodes, null),
     };
@@ -89,6 +101,7 @@ public class SpecialtyTreesController : ControllerBase
             Icon = dto.Icon,
             Year = dto.Year,
             SourceProportional = dto.SourceProportional,
+            CohortId = dto.CohortId,
         };
         _db.SpecialtyTrees.Add(item);
         await _db.SaveChangesAsync();
@@ -108,6 +121,7 @@ public class SpecialtyTreesController : ControllerBase
         item.Icon = dto.Icon;
         item.Year = dto.Year;
         item.SourceProportional = dto.SourceProportional;
+        item.CohortId = dto.CohortId;
         await _db.SaveChangesAsync();
         return NoContent();
     }
@@ -133,6 +147,52 @@ public class SpecialtyTreesController : ControllerBase
         return NoContent();
     }
 
+    // Arxivləmə silmə DEYİL: sətir yerində qalır, yalnız IsArchived=true olur.
+    // Səbəb: Selection.TreeId bu struktura Restrict FK ilə bağlıdır — silinsə,
+    // həmin dövrdə edilmiş seçimlərin nəticələri də itərdi.
+    [HttpPost("{id}/archive")]
+    [Authorize(Roles = "admin")]
+    [RequirePermission("tree.delete")]
+    public Task<IActionResult> Archive(string id) => SetArchived(id, true);
+
+    [HttpPost("{id}/restore")]
+    [Authorize(Roles = "admin")]
+    [RequirePermission("archive.restore")]
+    public Task<IActionResult> Restore(string id) => SetArchived(id, false);
+
+    private async Task<IActionResult> SetArchived(string id, bool archived)
+    {
+        var item = await _db.SpecialtyTrees.FindAsync(id);
+        if (item is null) return NotFound();
+        if (!User.CanAccessInstitution(item.InstitutionId)) return Forbid();
+        var now = DateTime.UtcNow;
+        item.IsArchived = archived;
+        item.ArchivedAt = archived ? now : null;
+
+        // Struktura bağlı seçimlər onunla birlikdə arxivə gedir/qayıdır.
+        var sels = await _db.Selections.Where(s => s.TreeId == id).ToListAsync();
+        foreach (var sel in sels)
+        {
+            if (archived)
+            {
+                // Onsuz da arxivdə olana toxunma — bərpada onu geri qaytarmamalıyıq.
+                if (sel.Status == SelectionStatus.Archived) continue;
+                sel.Status = SelectionStatus.Archived;
+                sel.ArchivedAt = now;
+                sel.ArchivedWithTree = true;
+            }
+            else if (sel.ArchivedWithTree)
+            {
+                sel.Status = SelectionStatus.Closed;
+                sel.ArchivedAt = null;
+                sel.ArchivedWithTree = false;
+            }
+        }
+
+        await _db.SaveChangesAsync();
+        return NoContent();
+    }
+
     [HttpDelete("{id}")]
     [Authorize(Roles = "admin")]
     [RequirePermission("tree.delete")]
@@ -141,6 +201,23 @@ public class SpecialtyTreesController : ControllerBase
         var item = await _db.SpecialtyTrees.FindAsync(id);
         if (item is null) return NotFound();
         if (!User.CanAccessInstitution(item.InstitutionId)) return Forbid();
+
+        // Seçimlər bu struktura Restrict FK ilə bağlıdır — silinsə baza xəta verir.
+        // Ona görə əvvəlcədən yoxlayıb aydın mesaj qaytarırıq.
+        var usedBy = await _db.Selections.Where(s => s.TreeId == id)
+                                         .Select(s => new { s.Name, s.Status }).ToListAsync();
+        if (usedBy.Count > 0)
+        {
+            // Arxivlənmiş seçim də bazada qalır və nəticələri göstərmək üçün
+            // bu struktura ehtiyac duyur — ona görə arxivləmək maneəni aradan qaldırmır.
+            var names = string.Join(", ", usedBy.Select(s =>
+                s.Status == "archived" ? $"\"{s.Name}\" (arxivdə)" : $"\"{s.Name}\""));
+            return Conflict(new { message =
+                $"Bu struktur {usedBy.Count} seçimə bağlıdır: {names}. " +
+                "Nəticələri göstərmək üçün həmin seçimlərə bu struktur lazımdır, ona görə tam silinmə mümkün deyil. " +
+                "Strukturu gözdən itirmək istəyirsənsə \"Arxivlə\" düyməsini işlət — seçimlər toxunulmaz qalır və bərpa edəndə hər şey geri qayıdır." });
+        }
+
         _db.SpecialtyTrees.Remove(item);
         await _db.SaveChangesAsync();
         return NoContent();
@@ -150,7 +227,7 @@ public class SpecialtyTreesController : ControllerBase
         flat.Where(n => n.ParentId == parentId)
             .Select(n => new SpecialtyNodeDto(
                 n.Id, n.Name, n.Quota, BuildTree(flat, n.Id),
-                n.Tiebreaker, n.GroupTiebreakers, n.Groups,
+                n.Tiebreaker, n.GroupTiebreakers, n.Groups, n.Filters,
                 n.QuotaMode, n.MulkiQuota, n.LiseyQuota,
                 n.AllowFemale, n.AllowMale, n.MaxFemale, n.MaxMale))
             .ToList();
@@ -171,6 +248,7 @@ public class SpecialtyTreesController : ControllerBase
                 Tiebreaker = n.Tiebreaker,
                 GroupTiebreakers = n.GroupTiebreakers,
                 Groups = n.Groups,
+                Filters = n.Filters,
                 QuotaMode = n.QuotaMode,
                 MulkiQuota = n.MulkiQuota,
                 LiseyQuota = n.LiseyQuota,

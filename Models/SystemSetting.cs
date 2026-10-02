@@ -8,4 +8,8 @@ public class SystemSetting
 
     // Excel idxalında prioritet kimi işarələnmiş fənn adları (qlobal, müəssisələr arası)
     public List<string> PrioritySubjects { get; set; } = new();
+
+    // Təsdiqdən sonrakı ekranda göstərilən elan (yalnız superadmin yazır).
+    // Boşdursa təhsilalana heç nə göstərilmir.
+    public string? SubmitNotice { get; set; }
 }

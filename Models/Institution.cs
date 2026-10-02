@@ -7,6 +7,7 @@ public class Institution
     public string? Icon { get; set; }
     public string? Year { get; set; }
 
+    public List<Cohort> Cohorts { get; set; } = new();
     public List<SpecialtyTree> SpecialtyTrees { get; set; } = new();
     public List<Selection> Selections { get; set; } = new();
     public List<Student> Students { get; set; } = new();

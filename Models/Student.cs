@@ -8,6 +8,11 @@ public class Student
     public string InstitutionId { get; set; } = default!;
     public Institution? Institution { get; set; }
 
+    // Hansı təhsilalan qrupuna aiddir. Köhnə qeydlər üçün null ola bilər — migrasiya
+    // onları müəssisənin "Əsas qrup"una bağlayır.
+    public string? CohortId { get; set; }
+    public Cohort? Cohort { get; set; }
+
     public string Name { get; set; } = default!;
     public string? ParentName { get; set; }
     public string? WorkNumber { get; set; }
@@ -38,6 +43,10 @@ public class Student
 
     // Ağac səviyyəsi indeksi -> qabaqcadan təyin edilmiş budaq adı (Selection.PreAssignLevel ilə işləyir)
     public Dictionary<int, string> BranchByLevel { get; set; } = new();
+
+    // Sərbəst mətn sütunları: Excel başlığı -> mətn dəyər (məs. {"dil":"ingilis"}).
+    // Subjects yalnız rəqəm saxladığı üçün mətn dəyərlər buraya yazılır.
+    public Dictionary<string, string> ExtraFields { get; set; } = new();
 
     public List<Submission> Submissions { get; set; } = new();
 }

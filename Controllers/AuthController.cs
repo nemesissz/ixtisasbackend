@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using MmuIspApi.Data;
 using MmuIspApi.Models;
@@ -39,12 +39,16 @@ public class AuthController : ControllerBase
                 var cfg = configs.FirstOrDefault(c => c.InstitutionId == instId);
                 var col1 = cfg?.Field1Column ?? "fin";
                 var col2 = cfg?.Field2Column ?? "workNumber";
+                var req1 = cfg?.Field1Required ?? true;
+                var req2 = cfg?.Field2Required ?? true;
                 var m = pool.FirstOrDefault(s =>
                 {
                     if (s.InstitutionId != instId) return false;
                     var a = Norm(StudentColumnValue(s, col1));
                     var b = Norm(StudentColumnValue(s, col2));
-                    return (a == v1 && b == v2) || (a == v2 && b == v1);
+                    // İki sıra da yoxlanılır: istifadəçi dəyərləri yerini dəyişik yaza bilər
+                    return Matches(a, b, v1, v2, req1, req2)
+                        || Matches(a, b, v2, v1, req1, req2);
                 });
                 if (m is not null) return m;
             }
@@ -72,6 +76,22 @@ public class AuthController : ControllerBase
 
         var token = _jwt.CreateToken(match.Id, new[] { "student" }, match.Name, institutionId: match.InstitutionId);
         return Ok(new { token, student = match });
+    }
+
+    // Sahə "məcburi deyil" konfiqurasiya edilib və boş göndərilibsə, o sahə
+    // uyğunlaşdırmada iştirak etmir — giriş yalnız dolu sahə(lər)ə görə olur.
+    // Ən azı bir sahə real olaraq uyğunlaşmalıdır: əks halda hər ikisi boş
+    // göndərilməklə istənilən hesaba girmək mümkün olardı.
+    private static bool Matches(string a, string b, string x, string y, bool req1, bool req2)
+    {
+        var hits = 0;
+        if (x.Length == 0) { if (req1) return false; }
+        else { if (a != x) return false; hits++; }
+
+        if (y.Length == 0) { if (req2) return false; }
+        else { if (b != y) return false; hits++; }
+
+        return hits > 0;
     }
 
     // Frontend-dəki normalize funksiyası ilə eyni: Azərbaycan İ/ı/i xüsusi hərflərini

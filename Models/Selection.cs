@@ -1,4 +1,4 @@
-namespace MmuIspApi.Models;
+﻿namespace MmuIspApi.Models;
 
 // draft -> published -> closed -> archived
 public static class SelectionStatus
@@ -38,6 +38,11 @@ public class Selection
     public DateTime? PublishedAt { get; set; }
     public DateTime? ClosedAt { get; set; }
     public DateTime? ArchivedAt { get; set; }
+
+    // true = bu seçim əl ilə deyil, strukturun arxivlənməsi ilə birlikdə arxivə düşüb.
+    // Struktur bərpa ediləndə yalnız belə seçimlər avtomatik geri qaytarılır —
+    // əvvəllər əl ilə arxivlənmiş seçimlərə toxunulmur.
+    public bool ArchivedWithTree { get; set; }
 
     public List<Submission> Submissions { get; set; } = new();
 }

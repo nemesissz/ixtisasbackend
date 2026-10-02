@@ -9,6 +9,9 @@ namespace MmuIspApi.Controllers;
 
 public record LoginFieldConfigDto(string Column, string Label, int Min, int Max, bool Required);
 public record InstLoginConfigDto(LoginFieldConfigDto Field1, LoginFieldConfigDto Field2);
+// Təsdiqdən sonrakı elan — düz mətn yox, JSON obyekt kimi gedir ki, frontend-in
+// http helper-i (hər cavabı JSON kimi oxuyur) onu düzgün ala bilsin.
+public record SubmitNoticeDto(string Text);
 
 [ApiController]
 [Route("api/[controller]")]
@@ -85,6 +88,28 @@ public class SystemSettingsController : ControllerBase
         var s = await _db.SystemSettings.FirstOrDefaultAsync(x => x.Id == 1);
         if (s is null) { s = new SystemSetting { Id = 1 }; _db.SystemSettings.Add(s); }
         s.PrioritySubjects = subjects ?? new();
+        await _db.SaveChangesAsync();
+        return NoContent();
+    }
+
+    // ── Təsdiqdən sonrakı elan ────────────────────────────────────────────
+    // Oxumaq hamıya açıqdır (təhsilalan giriş etmədən də görə bilər),
+    // yazmaq YALNIZ superadmin-ə.
+    [HttpGet("submit-notice")]
+    public async Task<ActionResult<SubmitNoticeDto>> GetSubmitNotice()
+    {
+        var s = await _db.SystemSettings.AsNoTracking().FirstOrDefaultAsync(x => x.Id == 1);
+        return Ok(new SubmitNoticeDto(s?.SubmitNotice ?? ""));
+    }
+
+    [HttpPut("submit-notice")]
+    [Authorize(Roles = "superadmin")]
+    public async Task<IActionResult> SetSubmitNotice(SubmitNoticeDto dto)
+    {
+        var s = await _db.SystemSettings.FirstOrDefaultAsync(x => x.Id == 1);
+        if (s is null) { s = new SystemSetting { Id = 1 }; _db.SystemSettings.Add(s); }
+        var t = (dto?.Text ?? "").Trim();
+        s.SubmitNotice = t.Length == 0 ? null : t;
         await _db.SaveChangesAsync();
         return NoContent();
     }
