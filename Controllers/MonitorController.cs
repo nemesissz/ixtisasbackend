@@ -6,7 +6,7 @@ using MmuIspApi.Models;
 
 namespace MmuIspApi.Controllers;
 
-public record MonitorBeatDto(bool Submitted);
+public record MonitorBeatDto(bool Submitted, string? SelectionId = null);
 public record MonitorConfigDto(bool Enabled, int HeartbeatSec, int OfflineSec, int AbandonMin);
 
 // Canlı nəzarət (docs/PLAN-canli-nezaret.md).
@@ -31,9 +31,10 @@ public class MonitorController : ControllerBase
         return c;
     }
 
-    // Cari (bitməmiş) seans
-    private Task<MonitorSession?> OpenSessionAsync() =>
-        _db.MonitorSessions.Where(s => s.Status != "ended").OrderByDescending(s => s.Id).FirstOrDefaultAsync();
+    // Seçimin cari (bitməmiş) seansı — hər seçim ayrıca izlənir
+    private Task<MonitorSession?> OpenSessionAsync(string? selectionId) =>
+        _db.MonitorSessions.Where(s => s.Status != "ended" && s.SelectionId == selectionId)
+            .OrderByDescending(s => s.Id).FirstOrDefaultAsync();
 
     private static int ElapsedSec(MonitorSession s, DateTime now)
     {
@@ -48,18 +49,14 @@ public class MonitorController : ControllerBase
         s.Status = "ended"; s.EndedAt = now; s.LastPausedAt = null;
     }
 
-    // Uzun müddət siqnal göndərməyənləri "yarımçıq" kimi işarələ, sonra hamı bitibsə seansı bağla
+    // Uzun müddət siqnal göndərməyənləri "yarımçıq" kimi işarələ.
+    // Seans avtomatik bitmir — hamı təsdiqləsə də yalnız superadmin "Bitir" ilə bağlayır.
     private async Task SweepAsync(MonitorConfig cfg, MonitorSession s, DateTime now)
     {
         var abandonBefore = now.AddMinutes(-Math.Max(1, cfg.AbandonMin));
         var stale = await _db.StudentPresences
             .Where(p => p.SessionId == s.Id && p.State == "active" && p.LastSeenAt < abandonBefore).ToListAsync();
         foreach (var p in stale) p.State = "abandoned";
-
-        var anyActive = await _db.StudentPresences.AnyAsync(p => p.SessionId == s.Id && p.State == "active");
-        var anyDone = await _db.StudentPresences.AnyAsync(p => p.SessionId == s.Id && p.State == "submitted");
-        // Sonuncu təhsilalan təsdiqlədi → seans avtomatik bitir
-        if (!anyActive && anyDone && s.Status != "ended") EndSession(s, now);
     }
 
     // ── Təhsilalan: heartbeat ──────────────────────────────────────────────
@@ -86,21 +83,36 @@ public class MonitorController : ControllerBase
             if (st is null) return NotFound();
             var submitted = dto.Submitted || st.Status == "submitted";
 
+            // Seçimin adı seansda saxlanılır — canlı ekranda hansı seçimin getdiyi görünsün
+            var selectionId = string.IsNullOrWhiteSpace(dto.SelectionId) ? null : dto.SelectionId;
+            string? selectionName = null;
+            if (selectionId is not null)
+            {
+                var sel = await _db.Selections.AsNoTracking()
+                    .Where(x => x.Id == selectionId).Select(x => new { x.Name }).FirstOrDefaultAsync();
+                if (sel is null) return NotFound();
+                selectionName = sel.Name;
+            }
+
             var p = await _db.StudentPresences.FirstOrDefaultAsync(x => x.StudentId == studentId);
-            var s = await OpenSessionAsync();
+            var s = await OpenSessionAsync(selectionId);
 
             // Artıq təsdiqləmiş və qeydə alınmış — heç nə etmirik
-            if (p is not null && p.State == "submitted")
+            if (p is not null && p.State == "submitted" && submitted)
                 return Ok(new { enabled = true, nextBeatSec = cfg.HeartbeatSec, serverNow = now });
 
             // Təsdiqləmiş, amma heç izlənməyib (sistem sonradan yandırılıb) — seans açmırıq
             if (submitted && p is null)
                 return Ok(new { enabled = true, nextBeatSec = cfg.HeartbeatSec, serverNow = now });
 
-            // İlk təhsilalan → yeni seans
+            // Bu seçimə ilk təhsilalan → yeni seans
             if (s is null)
             {
-                s = new MonitorSession { StartedAt = now, Status = "running" };
+                s = new MonitorSession
+                {
+                    StartedAt = now, Status = "running",
+                    SelectionId = selectionId, SelectionName = selectionName,
+                };
                 _db.MonitorSessions.Add(s);
                 await _db.SaveChangesAsync();
             }
@@ -117,7 +129,7 @@ public class MonitorController : ControllerBase
             }
             else if (p.SessionId != s.Id)
             {
-                // Köhnə (bitmiş) seansdan qalan sətir — yeni seansda sıfırdan başlayır
+                // Başqa (bitmiş və ya fərqli seçimin) seansından qalan sətir — bu seansda sıfırdan başlayır
                 p.SessionId = s.Id; p.StartedAt = now; p.SubmittedAt = null;
                 p.Name = st.Name ?? ""; p.Fin = st.Fin; p.Group = st.Group; p.InstitutionId = st.InstitutionId;
             }
@@ -137,12 +149,30 @@ public class MonitorController : ControllerBase
     // ── Superadmin: canlı ekran ────────────────────────────────────────────
     [HttpGet("live")]
     [Authorize(Roles = "superadmin")]
-    public async Task<IActionResult> Live()
+    public async Task<IActionResult> Live([FromQuery] int? sessionId)
     {
         var now = DateTime.UtcNow;
         var cfg = await ConfigAsync();
-        var s = await OpenSessionAsync()
-            ?? await _db.MonitorSessions.OrderByDescending(x => x.Id).FirstOrDefaultAsync();
+
+        // Seans siyahısı: bütün açıq seanslar + son bitmiş seanslar (seçici üçün)
+        var openList = await _db.MonitorSessions.AsNoTracking()
+            .Where(x => x.Status != "ended").OrderByDescending(x => x.Id).ToListAsync();
+        var endedList = await _db.MonitorSessions.AsNoTracking()
+            .Where(x => x.Status == "ended").OrderByDescending(x => x.Id).Take(10).ToListAsync();
+        var sessions = openList.Concat(endedList).Select(x => new
+        {
+            x.Id, x.SelectionId, x.SelectionName, x.Status, x.StartedAt, x.EndedAt,
+        }).ToList();
+
+        // Seçilmiş seans; verilməyibsə — ən son açıq, o da yoxdursa ən son bitmiş
+        var s = sessionId.HasValue
+            ? await _db.MonitorSessions.FirstOrDefaultAsync(x => x.Id == sessionId.Value)
+            : null;
+        if (s is null && sessions.Count > 0)
+        {
+            var pickId = sessions[0].Id;
+            s = await _db.MonitorSessions.FirstOrDefaultAsync(x => x.Id == pickId);
+        }
 
         if (s is not null && s.Status != "ended")
         {
@@ -181,9 +211,10 @@ public class MonitorController : ControllerBase
         {
             serverNow = now,
             config = new MonitorConfigDto(cfg.Enabled, cfg.HeartbeatSec, cfg.OfflineSec, cfg.AbandonMin),
+            sessions,
             session = s is null ? null : new
             {
-                s.Id, s.Status, s.StartedAt, s.EndedAt,
+                s.Id, s.SelectionId, s.SelectionName, s.Status, s.StartedAt, s.EndedAt,
                 elapsedSec = ElapsedSec(s, now),
             },
             active,
@@ -234,15 +265,15 @@ public class MonitorController : ControllerBase
     }
 
     // ── Superadmin: seans idarəsi ─────────────────────────────────────────
-    [HttpPost("session/{op}")]
+    [HttpPost("session/{id:int}/{op}")]
     [Authorize(Roles = "superadmin")]
-    public async Task<IActionResult> SessionAction(string op)
+    public async Task<IActionResult> SessionAction(int id, string op)
     {
         var now = DateTime.UtcNow;
         await BeatLock.WaitAsync();
         try
         {
-            var s = await OpenSessionAsync();
+            var s = await _db.MonitorSessions.FirstOrDefaultAsync(x => x.Id == id && x.Status != "ended");
             if (s is null) return NotFound();
             switch (op)
             {

@@ -233,7 +233,13 @@ public class MmuDbContext : DbContext
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).ValueGeneratedNever();
         });
-        modelBuilder.Entity<MonitorSession>(e => e.HasKey(x => x.Id));
+        modelBuilder.Entity<MonitorSession>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.SelectionId).HasMaxLength(255);
+            e.Property(x => x.SelectionName).HasMaxLength(300);
+            e.HasIndex(x => x.SelectionId);
+        });
         modelBuilder.Entity<StudentPresence>(e =>
         {
             e.HasKey(x => x.StudentId);

@@ -14,10 +14,13 @@ public class MonitorConfig
     public int AbandonMin { get; set; } = 20;     // bu qədər siqnal gəlməsə "yarımçıq"
 }
 
-// Bir seçim seansı — ilk təhsilalanın siqnalı ilə başlayır
+// Bir seçim seansı — həmin seçimə ilk təhsilalanın siqnalı ilə başlayır.
+// Hər seçimin öz seansı var; yalnız superadmin "Bitir" basanda bağlanır.
 public class MonitorSession
 {
     public int Id { get; set; }
+    public string? SelectionId { get; set; }
+    public string? SelectionName { get; set; }          // seçim sonradan silinsə də ad görünsün
     public DateTime StartedAt { get; set; }
     public DateTime? EndedAt { get; set; }
     public string Status { get; set; } = "running";   // running | paused | ended
