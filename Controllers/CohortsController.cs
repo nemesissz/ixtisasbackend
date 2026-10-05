@@ -122,14 +122,18 @@ public class CohortsController : ControllerBase
         if (id != "none" && target is null) return NotFound();
         if (target is not null && !User.CanAccessInstitution(target.InstitutionId)) return Forbid();
 
-        var students = await _db.Students.Where(s => studentIds.Contains(s.Id)).ToListAsync();
-        foreach (var s in students)
-        {
-            if (!User.CanAccessInstitution(s.InstitutionId)) continue;
+        var students = (await _db.Students.Where(s => studentIds.Contains(s.Id)).ToListAsync())
+            .Where(s => User.CanAccessInstitution(s.InstitutionId))
             // Qrup yalnız öz müəssisəsinin təhsilalanını saxlaya bilər
-            if (target is not null && s.InstitutionId != target.InstitutionId) continue;
-            s.CohortId = target?.Id;
-        }
+            .Where(s => target is null || s.InstitutionId == target.InstitutionId)
+            .ToList();
+
+        // Hədəf qrupda eyni FİN-li təhsilalan varsa köçürmə olmur
+        var conflicts = await FinRules.FindAsync(_db, students.Select((s, i) =>
+            new FinRules.Candidate(s.Id, s.InstitutionId, target?.Id, s.Fin, s.Name, i + 1)).ToList());
+        if (conflicts.Count > 0) return Conflict(FinRules.Body(conflicts));
+
+        foreach (var s in students) s.CohortId = target?.Id;
         await _db.SaveChangesAsync();
         return Ok(new { count = students.Count });
     }

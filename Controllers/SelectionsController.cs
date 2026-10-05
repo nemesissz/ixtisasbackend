@@ -161,6 +161,57 @@ public class SelectionsController : ControllerBase
         return NoContent();
     }
 
+    // Yayımdan əvvəl xəbərdarlıq (bloklamır): bu seçimin iştirakçılarından eyni FİN-li
+    // başqa qeydi olan və həmin qeydin başqa yayımdakı seçimdə iştirak etdiyi hallar.
+    // Real şəraitdə baş verməməlidir, amma olarsa admin bilsin.
+    [HttpGet("{id}/fin-conflicts")]
+    [Authorize(Roles = "admin")]
+    public async Task<ActionResult> FinConflicts(string id)
+    {
+        var sel = await _db.Selections.AsNoTracking().FirstOrDefaultAsync(s => s.Id == id);
+        if (sel is null) return NotFound();
+        if (!User.CanAccessInstitution(sel.InstitutionId)) return Forbid();
+
+        var mine = await ParticipantsAsync(sel);
+        var mineIds = mine.Select(s => s.Id).ToHashSet();
+        var fins = mine.Select(s => s.Fin).Where(f => !string.IsNullOrWhiteSpace(f)).Distinct().ToList();
+        if (fins.Count == 0) return Ok(Array.Empty<object>());
+
+        var others = (await _db.Students.AsNoTracking()
+                .Where(s => s.Fin != null && fins.Contains(s.Fin))
+                .ToListAsync())
+            .Where(s => !mineIds.Contains(s.Id)).ToList();
+        if (others.Count == 0) return Ok(Array.Empty<object>());
+
+        var published = await _db.Selections.AsNoTracking()
+            .Where(x => x.Status == SelectionStatus.Published && x.Id != id)
+            .Join(_db.SpecialtyTrees, x => x.TreeId, t => t.Id,
+                  (x, t) => new { x.Id, x.Name, x.InstitutionId, t.CohortId })
+            .ToListAsync();
+        var instNames = await _db.Institutions.AsNoTracking().ToDictionaryAsync(i => i.Id, i => i.Label);
+        var cohortNames = await _db.Cohorts.AsNoTracking().ToDictionaryAsync(c => c.Id, c => c.Label);
+
+        var byFin = mine.Where(s => !string.IsNullOrWhiteSpace(s.Fin))
+            .GroupBy(s => FinRules.Norm(s.Fin)).ToDictionary(g => g.Key, g => g.First());
+        var result = new List<object>();
+        foreach (var o in others)
+        {
+            if (!byFin.TryGetValue(FinRules.Norm(o.Fin), out var me)) continue;
+            var otherSel = published.FirstOrDefault(p =>
+                p.InstitutionId == o.InstitutionId && (p.CohortId == null || p.CohortId == o.CohortId));
+            if (otherSel is null) continue;
+            result.Add(new
+            {
+                fin = FinRules.Norm(o.Fin), name = me.Name,
+                otherStudentId = o.Id, otherStatus = o.Status,
+                otherInstitution = instNames.GetValueOrDefault(o.InstitutionId, o.InstitutionId),
+                otherCohort = o.CohortId is null ? null : cohortNames.GetValueOrDefault(o.CohortId, o.CohortId),
+                otherSelectionId = otherSel.Id, otherSelectionName = otherSel.Name,
+            });
+        }
+        return Ok(result);
+    }
+
     [HttpPost("{id}/publish")]
     [Authorize(Roles = "admin")]
     [RequirePermission("sel.publish")]

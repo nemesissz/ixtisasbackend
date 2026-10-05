@@ -82,6 +82,9 @@ public class StudentsController : ControllerBase
     public async Task<ActionResult<Student>> Create(StudentCreateDto dto)
     {
         if (!User.CanAccessInstitution(dto.InstitutionId)) return Forbid();
+        var conflicts = await FinRules.FindAsync(_db, new[] {
+            new FinRules.Candidate(dto.Id, dto.InstitutionId, dto.CohortId, dto.Fin, dto.Name, 1) });
+        if (conflicts.Count > 0) return Conflict(FinRules.Body(conflicts));
         var item = new Student
         {
             Id = string.IsNullOrEmpty(dto.Id) ? $"std_{DateTimeOffset.UtcNow.ToUnixTimeMilliseconds():x}" : dto.Id,
@@ -119,6 +122,10 @@ public class StudentsController : ControllerBase
     public async Task<ActionResult> BulkCreate([FromBody] List<StudentCreateDto> dtos)
     {
         if (dtos.Any(d => !User.CanAccessInstitution(d.InstitutionId))) return Forbid();
+        // Eyni qrupa eyni FİN-li təhsilalan idxal edilə bilməz — heç biri yazılmır
+        var conflicts = await FinRules.FindAsync(_db, dtos.Select((d, i) =>
+            new FinRules.Candidate(d.Id, d.InstitutionId, d.CohortId, d.Fin, d.Name, i + 1)).ToList());
+        if (conflicts.Count > 0) return Conflict(FinRules.Body(conflicts));
         var items = dtos.Select(dto => new Student
         {
             Id = string.IsNullOrEmpty(dto.Id) ? $"std_{DateTimeOffset.UtcNow.ToUnixTimeMilliseconds():x}_{Guid.NewGuid():N}"[..24] : dto.Id,
@@ -164,6 +171,12 @@ public class StudentsController : ControllerBase
         var isStaff = User.IsInRole("admin");
         if (isStaff)
         {
+            if (FinRules.Norm(dto.Fin) != FinRules.Norm(item.Fin) || dto.CohortId != item.CohortId)
+            {
+                var conflicts = await FinRules.FindAsync(_db, new[] {
+                    new FinRules.Candidate(item.Id, item.InstitutionId, dto.CohortId, dto.Fin, dto.Name, 1) });
+                if (conflicts.Count > 0) return Conflict(FinRules.Body(conflicts));
+            }
             item.Name = dto.Name;
             item.ParentName = dto.ParentName;
             item.WorkNumber = dto.WorkNumber;
