@@ -32,6 +32,9 @@ public record StudentBulkPatch(
     string Id, string? PlacedSpecialty, string? PlacedSpecialtyId,
     string? PlacedSelectionId, int? ChoiceNum, string? Status);
 
+// Seçilmiş təhsilalanlar üzrə toplu çap / seçim statusu dəyişikliyi
+public record StudentBulkStatusDto(List<string> Ids, string? PrintStatus, bool? ResetSelection);
+
 [ApiController]
 [Route("api/[controller]")]
 [Authorize(Roles = "admin,student")]
@@ -240,6 +243,45 @@ public class StudentsController : ControllerBase
 
         await _db.SaveChangesAsync();
         return NoContent();
+    }
+
+    // Təhsilalanlar səhifəsində seçilmiş sətirlər üzrə toplu status dəyişikliyi.
+    //   PrintStatus: "printed" | "not_printed"
+    //   ResetSelection: true → bütün göndərilmiş seçimlər silinir, status "pending",
+    //                   yerləşdirmə nəticəsi təmizlənir ("Seçim etmədi" vəziyyəti).
+    [HttpPost("bulk-status")]
+    [Authorize(Roles = "admin")]
+    [RequirePermission("users.edit")]
+    public async Task<IActionResult> BulkStatus([FromBody] StudentBulkStatusDto dto)
+    {
+        if (dto.Ids is null || dto.Ids.Count == 0) return Ok(new { count = 0 });
+        if (dto.PrintStatus is not null and not ("printed" or "not_printed"))
+            return BadRequest(new { message = "Yanlış çap statusu" });
+
+        var items = await _db.Students.Where(s => dto.Ids.Contains(s.Id)).ToListAsync();
+        if (items.Any(s => !User.CanAccessInstitution(s.InstitutionId))) return Forbid();
+
+        foreach (var s in items)
+        {
+            if (dto.PrintStatus is not null) s.PrintStatus = dto.PrintStatus;
+            if (dto.ResetSelection == true)
+            {
+                s.Status = "pending";
+                s.PlacedSpecialty = null;
+                s.PlacedSpecialtyId = null;
+                s.PlacedSelectionId = null;
+                s.ChoiceNum = null;
+            }
+        }
+        if (dto.ResetSelection == true)
+        {
+            var ids = items.Select(s => s.Id).ToList();
+            var subs = await _db.Submissions.Where(x => ids.Contains(x.UserId)).ToListAsync();
+            _db.Submissions.RemoveRange(subs);
+        }
+
+        await _db.SaveChangesAsync();
+        return Ok(new { count = items.Count });
     }
 
     [HttpPost("delete-many")]
