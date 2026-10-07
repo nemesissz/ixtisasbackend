@@ -264,6 +264,64 @@ public class MonitorController : ControllerBase
         await _db.MonitorSessions.ExecuteDeleteAsync();
     }
 
+    // ── Superadmin: seansın iştirakçıları (səhifələnmiş) ─────────────────────
+    // sort: "fast" — ən tez təsdiqləyən birinci, "slow" — ən gec birinci.
+    // state: "all" | "submitted" | "active" | "abandoned".
+    // Müddət: təsdiqləyən üçün təsdiq anına qədər, digərləri üçün son siqnala
+    // (aktivlərdə indiyə) qədər. Təsdiqləyənlər həmişə qalanlardan əvvəl sıralanır.
+    [HttpGet("session/{id:int}/participants")]
+    [Authorize(Roles = "superadmin")]
+    public async Task<IActionResult> Participants(int id, [FromQuery] int page = 1, [FromQuery] int size = 20,
+        [FromQuery] string sort = "fast", [FromQuery] string state = "all", [FromQuery] string? q = null)
+    {
+        var now = DateTime.UtcNow;
+        page = Math.Max(1, page);
+        size = Math.Clamp(size, 5, 200);
+        if (!await _db.MonitorSessions.AnyAsync(x => x.Id == id)) return NotFound();
+
+        var query = _db.StudentPresences.AsNoTracking().Where(p => p.SessionId == id);
+        if (state is "submitted" or "active" or "abandoned") query = query.Where(p => p.State == state);
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            var t = q.Trim();
+            query = query.Where(p => p.Name.Contains(t) || (p.Fin != null && p.Fin.Contains(t)));
+        }
+        var rows = await query.ToListAsync();
+
+        var instLabels = await _db.Institutions.AsNoTracking().ToDictionaryAsync(i => i.Id, i => i.Label);
+        int Sec(StudentPresence p) => Math.Max(0, (int)(((p.State == "submitted" && p.SubmittedAt.HasValue) ? p.SubmittedAt.Value
+            : p.State == "active" ? now : p.LastSeenAt) - p.StartedAt).TotalSeconds);
+
+        var list = rows.Select(p => new
+        {
+            p.StudentId, p.Name, p.Fin, p.Group,
+            institution = p.InstitutionId != null && instLabels.TryGetValue(p.InstitutionId, out var l) ? l : null,
+            p.State, p.StartedAt, p.SubmittedAt, p.LastSeenAt,
+            sec = Sec(p),
+        });
+        var ordered = sort == "slow"
+            ? list.OrderBy(x => x.State == "submitted" ? 0 : 1).ThenByDescending(x => x.sec).ThenBy(x => x.Name)
+            : list.OrderBy(x => x.State == "submitted" ? 0 : 1).ThenBy(x => x.sec).ThenBy(x => x.Name);
+        var all = ordered.ToList();
+        var items = all.Skip((page - 1) * size).Take(size)
+            .Select((x, i) => new { rank = (page - 1) * size + i + 1, x.StudentId, x.Name, x.Fin, x.Group, x.institution, x.State, x.StartedAt, x.SubmittedAt, x.LastSeenAt, x.sec })
+            .ToList();
+
+        return Ok(new
+        {
+            total = all.Count, page, size,
+            pages = Math.Max(1, (int)Math.Ceiling(all.Count / (double)size)),
+            counts = new
+            {
+                all = rows.Count,
+                submitted = rows.Count(p => p.State == "submitted"),
+                active = rows.Count(p => p.State == "active"),
+                abandoned = rows.Count(p => p.State == "abandoned"),
+            },
+            items,
+        });
+    }
+
     // ── Superadmin: seansın silinməsi ─────────────────────────────────────
     // Seans və ona aid bütün presence sətirləri (aktiv / yarımçıq / təsdiqləyən)
     // silinir. Açıq seans silinərsə və təhsilalanlar hələ siqnal göndərirsə,
