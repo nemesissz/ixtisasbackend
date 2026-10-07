@@ -264,6 +264,27 @@ public class MonitorController : ControllerBase
         await _db.MonitorSessions.ExecuteDeleteAsync();
     }
 
+    // ── Superadmin: seansın silinməsi ─────────────────────────────────────
+    // Seans və ona aid bütün presence sətirləri (aktiv / yarımçıq / təsdiqləyən)
+    // silinir. Açıq seans silinərsə və təhsilalanlar hələ siqnal göndərirsə,
+    // növbəti siqnalda həmin seçim üçün yeni seans avtomatik başlayır.
+    [HttpDelete("session/{id:int}")]
+    [Authorize(Roles = "superadmin")]
+    public async Task<IActionResult> DeleteSession(int id)
+    {
+        await BeatLock.WaitAsync();
+        try
+        {
+            var s = await _db.MonitorSessions.FirstOrDefaultAsync(x => x.Id == id);
+            if (s is null) return NotFound();
+            await _db.StudentPresences.Where(p => p.SessionId == id).ExecuteDeleteAsync();
+            _db.MonitorSessions.Remove(s);
+            await _db.SaveChangesAsync();
+            return NoContent();
+        }
+        finally { BeatLock.Release(); }
+    }
+
     // ── Superadmin: seans idarəsi ─────────────────────────────────────────
     [HttpPost("session/{id:int}/{op}")]
     [Authorize(Roles = "superadmin")]
