@@ -12,6 +12,8 @@ public class MonitorConfig
     public int HeartbeatSec { get; set; } = 30;   // təhsilalan səhifəsinin siqnal intervalı
     public int OfflineSec { get; set; } = 90;     // bu qədər siqnal gəlməsə "əlaqə kəsildi"
     public int AbandonMin { get; set; } = 20;     // bu qədər siqnal gəlməsə "yarımçıq"
+    public int WarnMin { get; set; } = 10;        // seçim müddəti bunu keçəndə sarı
+    public int DangerMin { get; set; } = 20;      // bunu keçəndə qırmızı
 }
 
 // Bir seçim seansı — həmin seçimə ilk təhsilalanın siqnalı ilə başlayır.

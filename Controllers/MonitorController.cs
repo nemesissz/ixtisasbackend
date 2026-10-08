@@ -7,7 +7,7 @@ using MmuIspApi.Models;
 namespace MmuIspApi.Controllers;
 
 public record MonitorBeatDto(bool Submitted, string? SelectionId = null);
-public record MonitorConfigDto(bool Enabled, int HeartbeatSec, int OfflineSec, int AbandonMin);
+public record MonitorConfigDto(bool Enabled, int HeartbeatSec, int OfflineSec, int AbandonMin, int WarnMin = 10, int DangerMin = 20);
 
 // Canlı nəzarət (docs/PLAN-canli-nezaret.md).
 // Təhsilalan səhifəsi heartbeat göndərir, superadmin canlı ekranı yüngül poll edir.
@@ -210,7 +210,7 @@ public class MonitorController : ControllerBase
         return Ok(new
         {
             serverNow = now,
-            config = new MonitorConfigDto(cfg.Enabled, cfg.HeartbeatSec, cfg.OfflineSec, cfg.AbandonMin),
+            config = new MonitorConfigDto(cfg.Enabled, cfg.HeartbeatSec, cfg.OfflineSec, cfg.AbandonMin, cfg.WarnMin, cfg.DangerMin),
             sessions,
             session = s is null ? null : new
             {
@@ -234,7 +234,7 @@ public class MonitorController : ControllerBase
     public async Task<ActionResult<MonitorConfigDto>> GetConfig()
     {
         var c = await ConfigAsync();
-        return Ok(new MonitorConfigDto(c.Enabled, c.HeartbeatSec, c.OfflineSec, c.AbandonMin));
+        return Ok(new MonitorConfigDto(c.Enabled, c.HeartbeatSec, c.OfflineSec, c.AbandonMin, c.WarnMin, c.DangerMin));
     }
 
     // Yandır/söndür dəyişəndə bu sistemə aid hər şey sıfırlanır (seanslar + presence)
@@ -251,6 +251,8 @@ public class MonitorController : ControllerBase
             c.HeartbeatSec = Math.Clamp(dto.HeartbeatSec, 5, 600);
             c.OfflineSec = Math.Clamp(dto.OfflineSec, 15, 3600);
             c.AbandonMin = Math.Clamp(dto.AbandonMin, 1, 240);
+            c.WarnMin = Math.Clamp(dto.WarnMin, 1, 600);
+            c.DangerMin = Math.Clamp(dto.DangerMin, c.WarnMin + 1, 601);
             if (toggled) await ResetAllAsync();
             await _db.SaveChangesAsync();
             return NoContent();
