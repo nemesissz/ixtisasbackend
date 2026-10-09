@@ -12,6 +12,8 @@ public record InstLoginConfigDto(LoginFieldConfigDto Field1, LoginFieldConfigDto
 // Təsdiqdən sonrakı elan — düz mətn yox, JSON obyekt kimi gedir ki, frontend-in
 // http helper-i (hər cavabı JSON kimi oxuyur) onu düzgün ala bilsin.
 public record SubmitNoticeDto(string Text);
+// Görünüş rejimi — "light" | "dark" | "system"
+public record ThemeDto(string Theme);
 
 [ApiController]
 [Route("api/[controller]")]
@@ -110,6 +112,31 @@ public class SystemSettingsController : ControllerBase
         if (s is null) { s = new SystemSetting { Id = 1 }; _db.SystemSettings.Add(s); }
         var t = (dto?.Text ?? "").Trim();
         s.SubmitNotice = t.Length == 0 ? null : t;
+        await _db.SaveChangesAsync();
+        return NoContent();
+    }
+
+    // ── Görünüş rejimi (açıq / tünd / sistem) ─────────────────────────────
+    // Oxumaq hamıya açıqdır (giriş səhifəsi də tətbiq edir), yazmaq YALNIZ superadmin-ə.
+    private static readonly string[] Themes = { "light", "dark", "system" };
+
+    [HttpGet("theme")]
+    public async Task<ActionResult<ThemeDto>> GetTheme()
+    {
+        var s = await _db.SystemSettings.AsNoTracking().FirstOrDefaultAsync(x => x.Id == 1);
+        var t = s?.Theme;
+        return Ok(new ThemeDto(t is not null && Themes.Contains(t) ? t : "light"));
+    }
+
+    [HttpPut("theme")]
+    [Authorize(Roles = "superadmin")]
+    public async Task<IActionResult> SetTheme(ThemeDto dto)
+    {
+        var t = (dto?.Theme ?? "").Trim().ToLowerInvariant();
+        if (!Themes.Contains(t)) return BadRequest("Yanlış rejim");
+        var s = await _db.SystemSettings.FirstOrDefaultAsync(x => x.Id == 1);
+        if (s is null) { s = new SystemSetting { Id = 1 }; _db.SystemSettings.Add(s); }
+        s.Theme = t;
         await _db.SaveChangesAsync();
         return NoContent();
     }

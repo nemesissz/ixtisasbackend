@@ -12,4 +12,8 @@ public class SystemSetting
     // Təsdiqdən sonrakı ekranda göstərilən elan (yalnız superadmin yazır).
     // Boşdursa təhsilalana heç nə göstərilmir.
     public string? SubmitNotice { get; set; }
+
+    // Proqramın görünüş rejimi: "light" | "dark" | "system" (yalnız superadmin dəyişir).
+    // Boşdursa açıq rejim.
+    public string? Theme { get; set; }
 }
