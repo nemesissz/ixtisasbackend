@@ -13,7 +13,7 @@ public class SystemSetting
     // Boşdursa təhsilalana heç nə göstərilmir.
     public string? SubmitNotice { get; set; }
 
-    // Proqramın görünüş rejimi: "light" | "dark" | "system" (yalnız superadmin dəyişir).
+    // Proqramın görünüş rejimi: "light" | "dark" | "old" (yalnız superadmin dəyişir).
     // Boşdursa açıq rejim.
     public string? Theme { get; set; }
 }

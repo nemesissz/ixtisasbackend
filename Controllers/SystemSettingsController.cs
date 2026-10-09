@@ -12,7 +12,7 @@ public record InstLoginConfigDto(LoginFieldConfigDto Field1, LoginFieldConfigDto
 // Təsdiqdən sonrakı elan — düz mətn yox, JSON obyekt kimi gedir ki, frontend-in
 // http helper-i (hər cavabı JSON kimi oxuyur) onu düzgün ala bilsin.
 public record SubmitNoticeDto(string Text);
-// Görünüş rejimi — "light" | "dark" | "system"
+// Görünüş rejimi — "light" | "dark" | "old" (köhnə qızılı rənglər)
 public record ThemeDto(string Theme);
 
 [ApiController]
@@ -116,9 +116,9 @@ public class SystemSettingsController : ControllerBase
         return NoContent();
     }
 
-    // ── Görünüş rejimi (açıq / tünd / sistem) ─────────────────────────────
+    // ── Görünüş rejimi (açıq / tünd / köhnə) ─────────────────────────────
     // Oxumaq hamıya açıqdır (giriş səhifəsi də tətbiq edir), yazmaq YALNIZ superadmin-ə.
-    private static readonly string[] Themes = { "light", "dark", "system" };
+    private static readonly string[] Themes = { "light", "dark", "old" };
 
     [HttpGet("theme")]
     public async Task<ActionResult<ThemeDto>> GetTheme()
