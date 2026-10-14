@@ -68,6 +68,8 @@ public class StudentsController : ControllerBase
         var allowed = User.AllowedInstitutions();
         if (allowed is not null)
             query = query.Where(s => allowed.Contains(s.InstitutionId));
+        // Qrup əhatəsi: məhdud müəssisədə yalnız icazəli qrupların təhsilalanları
+        query = query.InCohortScope(User);
         return Ok(await query.ToListAsync());
     }
 

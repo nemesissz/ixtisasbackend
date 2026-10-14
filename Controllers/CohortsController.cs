@@ -28,6 +28,7 @@ public class CohortsController : ControllerBase
         var allowed = User.AllowedInstitutions();
         if (allowed is not null)
             query = query.Where(c => allowed.Contains(c.InstitutionId));
+        query = query.InCohortScope(User);
         return Ok(await query.OrderBy(c => c.SortOrder).ThenBy(c => c.CreatedAt).ToListAsync());
     }
 

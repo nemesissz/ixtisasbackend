@@ -7,8 +7,8 @@ using MmuIspApi.Services;
 
 namespace MmuIspApi.Controllers;
 
-public record AdminCreateDto(string Name, string? Email, string Username, string Password, string Role, List<string>? Permissions, List<string>? Institutions);
-public record AdminUpdateDto(string Name, string? Email, string? Password, string Role, string Status, List<string>? Permissions, List<string>? Institutions);
+public record AdminCreateDto(string Name, string? Email, string Username, string Password, string Role, List<string>? Permissions, List<string>? Institutions, List<string>? Cohorts = null);
+public record AdminUpdateDto(string Name, string? Email, string? Password, string Role, string Status, List<string>? Permissions, List<string>? Institutions, List<string>? Cohorts = null);
 public record AdminLoginDto(string Username, string Password);
 
 [ApiController]
@@ -24,7 +24,7 @@ public class AdminsController : ControllerBase
     [RequirePermission("admins.manage")]
     public async Task<ActionResult<IEnumerable<object>>> GetAll() =>
         Ok(await _db.Admins.AsNoTracking()
-            .Select(a => new { a.Id, a.Name, a.Email, a.Username, a.Role, a.Status, a.LastLogin, a.Permissions, a.Institutions })
+            .Select(a => new { a.Id, a.Name, a.Email, a.Username, a.Role, a.Status, a.LastLogin, a.Permissions, a.Institutions, a.Cohorts })
             .ToListAsync());
 
     [HttpPost]
@@ -47,9 +47,10 @@ public class AdminsController : ControllerBase
             // boş siyahı = məhdudiyyət yoxdur (bütün müəssisələr) → null saxla
             Institutions = dto.Institutions is { Count: > 0 } ? dto.Institutions : null,
         };
+        item.Cohorts = await CleanCohortsAsync(item.Institutions, dto.Cohorts);
         _db.Admins.Add(item);
         await _db.SaveChangesAsync();
-        return Ok(new { item.Id, item.Name, item.Email, item.Username, item.Role, item.Status, item.Permissions, item.Institutions });
+        return Ok(new { item.Id, item.Name, item.Email, item.Username, item.Role, item.Status, item.Permissions, item.Institutions, item.Cohorts });
     }
 
     [HttpPut("{id}")]
@@ -77,6 +78,7 @@ public class AdminsController : ControllerBase
             item.Status = dto.Status;
             item.Permissions = dto.Permissions;
             item.Institutions = dto.Institutions is { Count: > 0 } ? dto.Institutions : null;
+            item.Cohorts = await CleanCohortsAsync(item.Institutions, dto.Cohorts);
         }
         if (!string.IsNullOrEmpty(dto.Password))
             item.PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.Password);
@@ -115,8 +117,25 @@ public class AdminsController : ControllerBase
         await _db.SaveChangesAsync();
 
         var roles = candidate.Role == panelScope ? new[] { candidate.Role } : new[] { candidate.Role, panelScope };
-        var token = _jwt.CreateToken(candidate.Id, roles, candidate.Name, candidate.Permissions, institutions: candidate.Institutions);
+        // Qrup əhatəsi: hansı müəssisələr qrupla məhdudlaşdırılıb (seçilmiş qrupların müəssisələri)
+        var cohortIds = candidate.Cohorts ?? new List<string>();
+        var cohortInsts = cohortIds.Count == 0 ? new List<string>()
+            : await _db.Cohorts.AsNoTracking().Where(c => cohortIds.Contains(c.Id))
+                .Select(c => c.InstitutionId).Distinct().ToListAsync();
+        var token = _jwt.CreateToken(candidate.Id, roles, candidate.Name, candidate.Permissions, institutions: candidate.Institutions,
+            cohorts: cohortIds, cohortInstitutions: cohortInsts);
 
-        return Ok(new { token, candidate.Id, candidate.Name, candidate.Email, candidate.Username, candidate.Role, candidate.Permissions, candidate.Institutions });
+        return Ok(new { token, candidate.Id, candidate.Name, candidate.Email, candidate.Username, candidate.Role, candidate.Permissions, candidate.Institutions, candidate.Cohorts });
+    }
+
+    // Qrup əhatəsi yalnız seçilmiş müəssisələrin mövcud qruplarından ibarət ola bilər;
+    // müəssisə məhdudiyyəti yoxdursa (hamısı) qrup məhdudiyyəti də saxlanmır.
+    private async Task<List<string>?> CleanCohortsAsync(List<string>? institutions, List<string>? cohorts)
+    {
+        if (institutions is not { Count: > 0 } || cohorts is not { Count: > 0 }) return null;
+        var valid = await _db.Cohorts.AsNoTracking()
+            .Where(c => cohorts.Contains(c.Id) && institutions.Contains(c.InstitutionId))
+            .Select(c => c.Id).ToListAsync();
+        return valid.Count > 0 ? valid : null;
     }
 }

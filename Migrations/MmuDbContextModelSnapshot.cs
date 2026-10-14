@@ -27,6 +27,9 @@ namespace MmuIspApi.Migrations
                     b.Property<string>("Id")
                         .HasColumnType("varchar(255)");
 
+                    b.Property<string>("Cohorts")
+                        .HasColumnType("json");
+
                     b.Property<string>("Email")
                         .HasColumnType("longtext");
 

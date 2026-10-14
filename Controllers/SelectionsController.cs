@@ -42,6 +42,7 @@ public class SelectionsController : ControllerBase
         var allowed = User.AllowedInstitutions();
         if (allowed is not null)
             query = query.Where(s => allowed.Contains(s.InstitutionId));
+        query = query.InCohortScope(User, _db);
         return Ok(await query.ToListAsync());
     }
 

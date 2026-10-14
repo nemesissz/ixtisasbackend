@@ -22,4 +22,9 @@ public class Admin
     // Müəssisə əhatəsi: null/boş = bütün müəssisələr (superadmin və məhdudlaşdırılmamış hesablar).
     // Doludursa hesab yalnız bu müəssisə(lər)in datasını görür (institution scope).
     public List<string>? Institutions { get; set; }
+
+    // Qrup əhatəsi (Cohort id-ləri): müəssisə seçildikdən sonra həmin müəssisənin
+    // qruplarından bəziləri seçilə bilər. Bir müəssisənin heç bir qrupu seçilməyibsə
+    // o müəssisənin bütün qrupları görünür; seçilibsə yalnız həmin qrup(lar).
+    public List<string>? Cohorts { get; set; }
 }

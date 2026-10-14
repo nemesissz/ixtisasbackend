@@ -34,7 +34,9 @@ public class SubmissionsController : ControllerBase
         if (User.AllowedInstitutions() is null) return true;
         var instId = await _db.Selections.AsNoTracking()
             .Where(s => s.Id == selectionId).Select(s => s.InstitutionId).FirstOrDefaultAsync();
-        return User.CanAccessInstitution(instId);
+        if (!User.CanAccessInstitution(instId)) return false;
+        // Qrup əhatəsi: seçimin strukturu icazəli qrupa aid olmalıdır
+        return await _db.Selections.AsNoTracking().Where(s => s.Id == selectionId).InCohortScope(User, _db).AnyAsync();
     }
 
     [HttpGet]
@@ -47,7 +49,7 @@ public class SubmissionsController : ControllerBase
         if (allowed is not null)
         {
             var selIds = await _db.Selections.AsNoTracking()
-                .Where(s => allowed.Contains(s.InstitutionId)).Select(s => s.Id).ToListAsync();
+                .Where(s => allowed.Contains(s.InstitutionId)).InCohortScope(User, _db).Select(s => s.Id).ToListAsync();
             query = query.Where(s => selIds.Contains(s.SelectionId));
         }
         return Ok(await query.ToListAsync());

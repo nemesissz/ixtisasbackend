@@ -47,7 +47,7 @@ public class SpecialtyTreesController : ControllerBase
         // archived=false → yalnız aktiv strukturlar (İxtisaslar səhifəsi)
         // archived=true  → yalnız arxivdəkilər (Arxiv səhifəsi)
         var trees = await _db.SpecialtyTrees.AsNoTracking()
-            .Where(t => t.IsArchived == archived).ToListAsync();
+            .Where(t => t.IsArchived == archived).InCohortScope(User).ToListAsync();
         var allNodes = await _db.SpecialtyNodes.AsNoTracking().OrderBy(n => n.SortOrder).ToListAsync();
         var nodesByTree = allNodes.GroupBy(n => n.TreeId).ToDictionary(g => g.Key, g => g.ToList());
 
