@@ -139,6 +139,7 @@ public class MmuDbContext : DbContext
             e.HasKey(x => x.Id);
             e.Property(x => x.Name).IsRequired().HasMaxLength(200);
             e.Property(x => x.Tiebreaker).HasConversion(stringListConverter, stringListComparer).HasColumnType("json");
+            e.Property(x => x.DefaultOrder).HasConversion(nullableStringListConverter, nullableStringListComparer).HasColumnType("json");
             e.HasOne(x => x.Institution).WithMany(i => i.Selections)
                 .HasForeignKey(x => x.InstitutionId).OnDelete(DeleteBehavior.Cascade);
             e.HasOne(x => x.Tree).WithMany()

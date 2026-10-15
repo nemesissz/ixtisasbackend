@@ -14,7 +14,8 @@ public record SelectionCreateDto(
 
 public record SelectionUpdateDto(
     string Name, int StudentCount, int ChoiceCount,
-    List<string> Tiebreaker, string ViewMode, bool SourceProportional, int? PreAssignLevel);
+    List<string> Tiebreaker, string ViewMode, bool SourceProportional, int? PreAssignLevel,
+    List<string>? DefaultOrder = null, bool KeepDefaultOrder = true);
 
 [ApiController]
 [Route("api/[controller]")]
@@ -99,6 +100,9 @@ public class SelectionsController : ControllerBase
         item.ViewMode = dto.ViewMode;
         item.SourceProportional = dto.SourceProportional;
         item.PreAssignLevel = dto.PreAssignLevel;
+        // Köhnə klientlər bu sahəni göndərmir — o halda mövcud sıra saxlanılır
+        if (!dto.KeepDefaultOrder)
+            item.DefaultOrder = dto.DefaultOrder is { Count: > 0 } ? dto.DefaultOrder : null;
         await _db.SaveChangesAsync();
         return NoContent();
     }

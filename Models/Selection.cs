@@ -27,6 +27,9 @@ public class Selection
     public List<string> Tiebreaker { get; set; } = new();
 
     public string ViewMode { get; set; } = "list";
+
+    // Təhsilalana ilkin göstərilən ixtisas sırası (ixtisas id-ləri). null = strukturdakı sıra
+    public List<string>? DefaultOrder { get; set; }
     public bool SourceProportional { get; set; }
 
     // Ağac dərinlik indeksi: tələbənin BranchByLevel[PreAssignLevel] dəyərinə görə seçə biləcəyi alt-ağac filtrlənir

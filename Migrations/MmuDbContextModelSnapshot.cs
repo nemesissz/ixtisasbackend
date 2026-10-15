@@ -319,6 +319,9 @@ namespace MmuIspApi.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime(6)");
 
+                    b.Property<string>("DefaultOrder")
+                        .HasColumnType("json");
+
                     b.Property<string>("InstitutionId")
                         .IsRequired()
                         .HasColumnType("varchar(255)");
